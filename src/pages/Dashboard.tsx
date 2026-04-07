@@ -29,7 +29,21 @@ export default function Dashboard() {
         .select("*")
         .eq("user_id", user?.id)
         .order("date", { ascending: false });
-      if (error) throw error;
+      if (error && error.code !== '42P01') throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  const { data: fixedExpenses = [] } = useQuery({
+    queryKey: ["fixed_expenses", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fixed_expenses")
+        .select("*")
+        .eq("user_id", user?.id)
+        .eq("is_active", true);
+      if (error && error.code !== '42P01') throw error;
       return data || [];
     },
     enabled: !!user?.id,
@@ -73,21 +87,19 @@ export default function Dashboard() {
   
   const currentMonthExpenses = expenses.filter(e => {
     const expenseDate = new Date(e.date);
-    return expenseDate.getMonth() === today.getMonth() && expenseDate.getFullYear() === today.getFullYear();
+    return expenseDate.getMonth() === today.getMonth() && expenseDate.getFullYear() === today.getFullYear() && !e.is_recurring;
   });
 
-  const totalSpent = currentMonthExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const totalSpentVariable = currentMonthExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const totalSpentFixed = fixedExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   
   const accountsTotal = accounts.reduce((sum: number, acc: any) => sum + (Number(acc.balance) || 0), 0);
-
-  // Patrimonio total líquido (Accounts + Cash) (Without assuming future salary actually in hands)
-  // But user stated: "Cuentas registradas + Efectivo + lo que viene de nómina" for available money maybe? 
-  // Wait, let's keep it safe: Liquid = Cash + Banco.
   const liquidWealth = rawCash + accountsTotal;
-  // Available budget this month = Total Liquid + Income - Spent.
-  const available = (monthlyIncome + liquidWealth) - totalSpent; 
 
-  const budgetPercent = monthlyIncome > 0 ? Math.round((totalSpent / monthlyIncome) * 100) : 0;
+  // Calculo Maestro Dux
+  const available = monthlyIncome - totalSpentFixed - totalSpentVariable; 
+
+  const budgetPercent = monthlyIncome > 0 ? Math.round(((totalSpentFixed + totalSpentVariable) / monthlyIncome) * 100) : 0;
   const timePercent = Math.round((dayOfMonth / daysInMonth) * 100);
 
   const insight = INSIGHTS[today.getDate() % INSIGHTS.length];
@@ -165,23 +177,33 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Available money card (Patrimonio) */}
+      {/* Available money card (Patrimonio vs Compromisos) */}
       <div className={`rounded-3xl p-6 relative overflow-hidden ${available >= 0 ? "bg-primary" : "bg-destructive"} text-primary-foreground`}>
         <div className="absolute right-[-10%] top-[-10%] opacity-10">
            <Banknote className="h-32 w-32" />
         </div>
         <div className="relative z-10">
-          <p className="mb-1 text-sm font-medium opacity-90">Patrimonio Líquido Total</p>
+          <p className="mb-1 text-sm font-medium opacity-90">Disponible Real (Fin de mes)</p>
           <p className="text-3xl font-bold tracking-tight">{formatQ(available)}</p>
-          <div className="mt-4 flex bg-primary-foreground/10 rounded-xl p-3 items-center justify-between text-xs font-medium">
-            <div className="flex flex-col">
-               <span className="opacity-75">Bancos + Efectivo</span>
-               <span>{formatQ(liquidWealth)}</span>
-            </div>
-            <div className="flex flex-col text-right">
-               <span className="opacity-75">Ingreso Flujo</span>
-               <span>{formatQ(monthlyIncome)}</span>
-            </div>
+          
+          <div className="mt-4 flex flex-col gap-1.5 bg-primary-foreground/10 rounded-xl p-3 text-xs font-medium">
+             <div className="flex justify-between">
+                <span className="opacity-75">Tu Ingreso Mes</span>
+                <span>{formatQ(monthlyIncome)}</span>
+             </div>
+             <div className="flex justify-between">
+                <span className="opacity-75">Compromisos fijos en rojo</span>
+                <span className="text-red-300">- {formatQ(totalSpentFixed)}</span>
+             </div>
+             <div className="flex justify-between">
+                <span className="opacity-75">Gastado variable</span>
+                <span className="text-red-300">- {formatQ(totalSpentVariable)}</span>
+             </div>
+             <div className="h-px w-full bg-white/20 my-1" />
+             <div className="flex justify-between font-bold">
+                <span>Disponible limpio:</span>
+                <span>{formatQ(available)}</span>
+             </div>
           </div>
         </div>
       </div>

@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { EXPENSE_CATEGORIES, formatQ } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { Edit2, X, Plus, AlertCircle, Settings, Trash2 } from "lucide-react";
+import { Edit2, X, Plus, AlertCircle, Settings, Trash2, CheckCircle, Clock, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -54,6 +54,66 @@ export default function Presupuesto() {
       return data || [];
     },
     enabled: !!user?.id,
+  });
+
+  const { data: fixedExpenses = [] } = useQuery({
+    queryKey: ["fixed_expenses", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("fixed_expenses").select("*").eq("user_id", user?.id).eq("is_active", true);
+      if (error && error.code !== '42P01') throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  const { data: fixedPayments = [] } = useQuery({
+    queryKey: ["fixed_payments", user?.id],
+    queryFn: async () => {
+      // Current month roughly
+      const today = new Date();
+      const { data, error } = await supabase.from("fixed_expense_payments")
+         .select("*")
+         .eq("user_id", user?.id)
+         .eq("month", today.getMonth() + 1)
+         .eq("year", today.getFullYear());
+      if (error && error.code !== '42P01') throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  const confirmPaymentMutation = useMutation({
+    mutationFn: async (fixedExpense: any) => {
+      const today = new Date();
+      const month = today.getMonth() + 1;
+      const year = today.getFullYear();
+      
+      const { error: pError } = await supabase.from("fixed_expense_payments").insert({
+        fixed_expense_id: fixedExpense.id,
+        user_id: user?.id,
+        amount_paid: fixedExpense.amount,
+        payment_date: today.toISOString().split('T')[0],
+        month,
+        year,
+        confirmed: true
+      });
+      if (pError) throw pError;
+
+      const { error: eError } = await supabase.from("expenses").insert({
+         user_id: user?.id,
+         amount: fixedExpense.amount,
+         category: fixedExpense.category,
+         note: `Compromiso: ${fixedExpense.name}`,
+         date: today.toISOString(),
+         is_recurring: true
+      });
+      if (eError) throw eError;
+    },
+    onSuccess: () => {
+       queryClient.invalidateQueries({ queryKey: ["fixed_payments", user?.id] });
+       queryClient.invalidateQueries({ queryKey: ["expenses", user?.id] });
+       toast.success("Pago confirmado");
+    }
   });
 
   const updateIncomeMutation = useMutation({
@@ -108,7 +168,7 @@ export default function Presupuesto() {
   const today = new Date();
   const currentMonthExpenses = expenses.filter(e => {
     const d = new Date(e.date);
-    return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+    return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear() && !e.is_recurring;
   });
 
   const totalSpent = useMemo(() => currentMonthExpenses.reduce((s, e) => s + (e.amount || 0), 0), [currentMonthExpenses]);
@@ -173,9 +233,74 @@ export default function Presupuesto() {
         </div>
       </div>
 
+      <div className="flex justify-between items-center mb-3 mt-6">
+        <h3 className="text-sm font-semibold text-foreground">Compromisos del Mes ({fixedExpenses.length})</h3>
+        <p className="text-xs text-muted-foreground italic">Gastos Fijos</p>
+      </div>
+
+      <div className="space-y-3 mb-8">
+        {fixedExpenses.length === 0 ? (
+          <div className="text-center rounded-2xl bg-card p-4 border border-border shadow-sm">
+            <p className="text-xs text-muted-foreground">No tienes compromisos configurados.</p>
+          </div>
+        ) : (
+          fixedExpenses.map(exp => {
+            const isPaid = fixedPayments.some((p: any) => p.fixed_expense_id === exp.id && p.confirmed);
+            const currentDay = today.getDate();
+            const dayDist = exp.payment_day - currentDay;
+            
+            let statusText = "Pendiente";
+            let statusColor = "text-muted-foreground";
+            let wrapperClass = "bg-card border-border";
+            let IconStatus = Clock;
+
+            if (isPaid) {
+               statusText = "Confirmado";
+               statusColor = "text-green-500";
+               wrapperClass = "bg-green-500/10 border-green-500/20";
+               IconStatus = CheckCircle;
+            } else if (dayDist < 0) {
+               statusText = "Vencido";
+               statusColor = "text-destructive";
+               wrapperClass = "bg-destructive/10 border-destructive/20";
+               IconStatus = AlertTriangle;
+            } else if (dayDist <= 3) {
+               statusText = dayDist === 0 ? "Por pagar HOY" : `En ${dayDist} días`;
+               statusColor = "text-warning";
+               wrapperClass = "bg-warning/10 border-warning/20";
+               IconStatus = AlertCircle;
+            }
+
+            return (
+              <div key={exp.id} className={cn("rounded-xl p-4 border transition-all flex flex-col gap-3", wrapperClass)}>
+                 <div className="flex justify-between items-center">
+                    <div>
+                       <p className="text-sm font-bold text-foreground">{exp.name}</p>
+                       <div className={cn("flex items-center gap-1 mt-1 text-xs font-semibold", statusColor)}>
+                          <IconStatus className="h-3 w-3" />
+                          <span>{statusText} (Día {exp.payment_day})</span>
+                       </div>
+                    </div>
+                    <p className="text-lg font-bold text-foreground">{formatQ(exp.amount)}</p>
+                 </div>
+                 {!isPaid && (
+                   <Button size="sm" variant={dayDist <= 3 ? "default" : "secondary"} className="w-full text-xs font-bold" onClick={() => {
+                      if (window.confirm(`¿Confirmar pago de ${formatQ(exp.amount)} para ${exp.name}?`)) {
+                         confirmPaymentMutation.mutate(exp);
+                      }
+                   }}>
+                      Confirmar el Pago de este mes
+                   </Button>
+                 )}
+              </div>
+            )
+          })
+        )}
+      </div>
+
       <div className="flex justify-between items-center mb-3">
-        <h3 className="text-sm font-semibold text-foreground">Tus Topes</h3>
-        <p className="text-xs text-muted-foreground italic">Toca una categoría para editarla</p>
+        <h3 className="text-sm font-semibold text-foreground">Tus Topes (Variable)</h3>
+        <p className="text-xs text-muted-foreground italic">Toca para editar</p>
       </div>
 
       {/* Category budget list */}

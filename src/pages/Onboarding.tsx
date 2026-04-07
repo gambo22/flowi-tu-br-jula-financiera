@@ -25,7 +25,7 @@ interface OnboardingState {
   paymentDay1: string;
   paymentDay2: string;
 
-  expenses: { id: string; categoryId: string; amount: string; name: string }[];
+  fixed_expenses: { id: string; categoryId: string; amount: string; name: string; payment_day: string }[];
   goalType: string | null;
   goalName: string;
   goalAmount: string;
@@ -61,7 +61,7 @@ export default function Onboarding() {
     paymentDayType: "last_business_day",
     paymentDay1: "",
     paymentDay2: "",
-    expenses: [],
+    fixed_expenses: [],
     goalType: null,
     goalName: "",
     goalAmount: "",
@@ -121,18 +121,19 @@ export default function Onboarding() {
 
       if (userError) throw userError;
 
-      // Gastos
-      if (data.expenses.length > 0) {
-        const expensesToInsert = data.expenses.map((e) => ({
+      // Gastos Fijos (Compromisos)
+      if (data.fixed_expenses.length > 0) {
+        const expensesToInsert = data.fixed_expenses.map((e) => ({
           user_id: user.id,
           category: e.categoryId,
           amount: Number(e.amount) || 0,
-          note: e.name,
-          date: new Date().toISOString(),
-          is_recurring: true,
+          name: e.name,
+          payment_day: Number(e.payment_day) || 1,
+          payment_day_type: 'fixed',
+          is_active: true
         }));
         
-        const { error: expError } = await supabase.from("expenses").insert(expensesToInsert);
+        const { error: expError } = await supabase.from("fixed_expenses").insert(expensesToInsert);
         if (expError) throw expError;
       }
 
@@ -302,26 +303,39 @@ export default function Onboarding() {
           </div>
         )}
 
-        {/* STEP 3 and 4 (Expenses and Goals, mostly unchanged visual wrapper but abbreviated logic to save space) */}
+        {/* PASO 3 */}
         {step === 3 && (
           <div className="animate-slide-up space-y-4">
             <h1 className="text-2xl font-bold text-foreground">¿Tienes Gastos Fijos? (Se descontarán auto)</h1>
             {COMMON_EXPENSES.map((ce) => {
-              const isSelected = data.expenses.some(e => e.id === ce.id);
-              const expObj = data.expenses.find(e => e.id === ce.id);
+              const isSelected = data.fixed_expenses.some(e => e.id === ce.id);
+              const expObj = data.fixed_expenses.find(e => e.id === ce.id);
               return (
                 <div key={ce.id} className="rounded-2xl border p-3 flex flex-col gap-2 bg-card text-foreground">
                   <div className="flex justify-between items-center cursor-pointer" onClick={() => {
-                    if (isSelected) updateData({ expenses: data.expenses.filter(x => x.id !== ce.id) });
-                    else updateData({ expenses: [...data.expenses, { id: ce.id, categoryId: ce.cat, amount: "", name: ce.label }] });
+                    if (isSelected) updateData({ fixed_expenses: data.fixed_expenses.filter(x => x.id !== ce.id) });
+                    else updateData({ fixed_expenses: [...data.fixed_expenses, { id: ce.id, categoryId: ce.cat, amount: "", name: ce.label, payment_day: "" }] });
                   }}>
                     <span className="font-medium text-sm text-foreground">{ce.label}</span>
                     <Switch checked={isSelected} />
                   </div>
                   {isSelected && (
-                    <input type="number" value={expObj?.amount || ""} onChange={(e) => {
-                      updateData({ expenses: data.expenses.map(x => x.id === ce.id ? { ...x, amount: e.target.value } : x) })
-                    }} placeholder="Monto (Q)" className="p-2 border rounded-xl outline-none bg-background text-foreground" autoFocus />
+                    <div className="flex gap-2">
+                      <input type="number" value={expObj?.amount || ""} onChange={(e) => {
+                        updateData({ fixed_expenses: data.fixed_expenses.map(x => x.id === ce.id ? { ...x, amount: e.target.value } : x) })
+                      }} placeholder="Monto (Q)" className="w-1/2 p-2 border rounded-xl outline-none bg-background text-foreground" autoFocus />
+                      
+                      <input type="number" 
+                        placeholder="Día de pago (1-31)" 
+                        value={expObj?.payment_day || ""} 
+                        onChange={(e) => {
+                           let val = parseInt(e.target.value);
+                           if (val < 1) val = 1; if (val > 31) val = 31;
+                           updateData({ fixed_expenses: data.fixed_expenses.map(x => x.id === ce.id ? { ...x, payment_day: val?.toString() || "" } : x) })
+                        }} 
+                        className="w-1/2 p-2 border rounded-xl outline-none bg-background text-foreground" 
+                      />
+                    </div>
                   )}
                 </div>
               )

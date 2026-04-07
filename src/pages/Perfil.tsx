@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import AddExpenseModal from "@/components/AddExpenseModal";
 
 export default function Perfil() {
   const { user, profile, refreshProfile } = useAuth();
@@ -34,16 +33,15 @@ export default function Perfil() {
   const [accName, setAccName] = useState("");
   const [accBalance, setAccBalance] = useState("");
 
-  const { data: recurringExpenses = [] } = useQuery({
-    queryKey: ["recurring_expenses", user?.id],
+  const { data: fixedExpenses = [] } = useQuery({
+    queryKey: ["fixed_expenses", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("expenses")
+        .from("fixed_expenses")
         .select("*")
         .eq("user_id", user?.id)
-        .eq("is_recurring", true)
-        .order("date", { ascending: false });
-      if (error) throw error;
+        .order("created_at", { ascending: false });
+      if (error && error.code !== '42P01') throw error; // handle missing table gracefully
       return data || [];
     },
     enabled: !!user?.id,
@@ -113,34 +111,34 @@ export default function Perfil() {
     },
   });
 
-  const upsertExpenseMutation = useMutation({
+  const upsertFixedExpenseMutation = useMutation({
     mutationFn: async (expense: any) => {
       if (expense.id) {
-        const { error } = await supabase.from("expenses").update({
-          amount: expense.amount, category: expense.category, note: expense.note, date: expense.date, is_recurring: true
+        const { error } = await supabase.from("fixed_expenses").update({
+          amount: expense.amount, category: expense.category, name: expense.name, payment_day: expense.payment_day, payment_day_type: "fixed"
         }).eq("id", expense.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("expenses").insert({
-          user_id: user?.id, amount: expense.amount, category: expense.category, note: expense.note, date: expense.date, is_recurring: true
+        const { error } = await supabase.from("fixed_expenses").insert({
+          user_id: user?.id, amount: expense.amount, category: expense.category, name: expense.name, payment_day: expense.payment_day, payment_day_type: "fixed"
         });
         if (error) throw error;
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["recurring_expenses", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["fixed_expenses", user?.id] });
       setShowAddFixed(false);
       setEditingExpense(null);
     },
   });
 
-  const deleteExpenseMutation = useMutation({
+  const deleteFixedExpenseMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("expenses").delete().eq("id", id);
+      const { error } = await supabase.from("fixed_expenses").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["recurring_expenses", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["fixed_expenses", user?.id] });
     },
   });
 
@@ -295,41 +293,42 @@ export default function Perfil() {
         </section>
 
 
-        {/* MIS GASTOS FIJOS SECTION */}
+        {/* VISUALIZADOR DE GASTOS FIJOS / COMPROMISOS */}
         <section>
           <div className="flex items-center justify-between px-1 mb-3">
-            <p className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">GASOS FIJOS DE PLANIFICACIÓN</p>
-            {recurringExpenses.length > 0 && (
-              <button onClick={() => setShowAddFixed(true)} className="text-xs text-primary font-bold hover:underline">+ Agregar recurrente</button>
+            <p className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">TUS COMPROMISOS (GASTOS FIJOS)</p>
+            {fixedExpenses.length > 0 && (
+              <button onClick={() => setShowAddFixed(true)} className="text-xs text-primary font-bold hover:underline">+ Agregar fijo</button>
             )}
           </div>
           
           <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-            {recurringExpenses.length === 0 ? (
+            {fixedExpenses.length === 0 ? (
               <div className="p-6 text-center bg-card">
                 <ShieldCheck className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
-                <p className="text-sm font-medium text-foreground">No tienes pagos fijos registrados.</p>
+                <p className="text-sm font-medium text-foreground">No tienes compromisos fijos registrados.</p>
                 <Button variant="outline" size="sm" className="mt-3" onClick={() => setShowAddFixed(true)}>
-                  <Plus className="h-4 w-4 mr-1" /> Configurar Primer Fijo
+                  <Plus className="h-4 w-4 mr-1" /> Nuevo Compromiso
                 </Button>
               </div>
             ) : (
               <div className="divide-y divide-border/50">
-                {recurringExpenses.map(exp => {
+                {fixedExpenses.map(exp => {
                   const cat = EXPENSE_CATEGORIES.find((c) => c.id === exp.category);
                   const Icon = cat?.icon;
                   return (
                      <div key={exp.id} className="flex flex-row items-center p-3 hover:bg-muted/30 transition-colors group">
-                       <button onClick={() => setEditingExpense({ ...exp, is_recurring: true })} className="flex flex-1 items-center gap-3 text-left">
+                       <button onClick={() => setEditingExpense({ ...exp })} className="flex flex-1 items-center gap-3 text-left">
                           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted group-hover:bg-background">
                             {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-foreground truncate">{exp.note || cat?.label}</p>
+                            <p className="text-sm font-semibold text-foreground truncate">{exp.name || cat?.label}</p>
+                            <p className="text-xs text-muted-foreground">Pago el día: {exp.payment_day}</p>
                           </div>
                           <span className="text-sm font-bold text-foreground mr-1">{formatQ(exp.amount || 0)}</span>
                        </button>
-                       <button onClick={(e) => { e.stopPropagation(); deleteExpenseMutation.mutate(exp.id); }} className="p-2 ml-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg">
+                       <button onClick={(e) => { e.stopPropagation(); deleteFixedExpenseMutation.mutate(exp.id); }} className="p-2 ml-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg">
                          <Trash2 className="h-4 w-4" />
                        </button>
                      </div>
@@ -365,12 +364,14 @@ export default function Perfil() {
 
       </div>
 
-      <AddExpenseModal
-        open={showAddFixed || !!editingExpense}
-        initialData={editingExpense || { is_recurring: true }}
-        onClose={() => { setShowAddFixed(false); setEditingExpense(null) }}
-        onSave={(exp) => upsertExpenseMutation.mutate(exp)}
-      />
+      {/* Modal para Editar/Agregar Compromiso Fijo */}
+      { (showAddFixed || !!editingExpense) && (
+         <AddFixedExpenseModal 
+            initialData={editingExpense} 
+            onClose={() => { setShowAddFixed(false); setEditingExpense(null); }} 
+            onSave={(exp) => upsertFixedExpenseMutation.mutate(exp)} 
+         />
+      )}
 
       {/* Account Modal simple in-place */}
       {addingAccount && (
@@ -526,4 +527,54 @@ function IncomeEditorModal({ profile, onClose, onUserUpdate }: { profile: any; o
           </div>
         </div>
   )
+}
+
+function AddFixedExpenseModal({ initialData, onClose, onSave }: any) {
+  const [amount, setAmount] = useState(initialData?.amount || "");
+  const [category, setCategory] = useState(initialData?.category || "");
+  const [name, setName] = useState(initialData?.name || "");
+  const [paymentDay, setPaymentDay] = useState(initialData?.payment_day || 1);
+
+  const handleSave = () => {
+    if (!amount || !category || !paymentDay) return;
+    onSave({
+      id: initialData?.id,
+      amount: parseFloat(amount),
+      category,
+      name,
+      payment_day: parseInt(paymentDay)
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
+      <div className="animate-slide-up w-full max-w-lg rounded-2xl bg-card p-6 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-foreground">{initialData ? "Editar Compromiso Fijo" : "Nuevo Compromiso Fijo"}</h2>
+        </div>
+        <div className="space-y-4 mb-6">
+           <Input type="number" placeholder="Monto (Q)" value={amount} onChange={e => setAmount(e.target.value)} />
+           <Input placeholder="Nombre (Ej: Colegiatura, Renta)" value={name} onChange={e => setName(e.target.value)} />
+           <div>
+              <label className="text-xs font-semibold text-muted-foreground">Día de cobro en el mes (1 - 31)</label>
+              <Input type="number" value={paymentDay} onChange={e => setPaymentDay(e.target.value)} />
+           </div>
+           <div>
+             <label className="text-xs font-semibold text-muted-foreground block mb-2">Icono de la Categoría</label>
+             <div className="grid grid-cols-4 gap-2">
+                {EXPENSE_CATEGORIES.map((cat) => (
+                  <button key={cat.id} onClick={() => setCategory(cat.id)} className={cn("flex flex-col items-center gap-1 rounded-xl p-2.5 text-xs transition-all", category === cat.id ? "bg-primary text-white shadow-md" : "bg-muted hover:bg-muted/80")}>
+                    <cat.icon className="h-5 w-5" />
+                  </button>
+                ))}
+             </div>
+           </div>
+        </div>
+        <div className="flex gap-2">
+           <Button variant="outline" className="w-1/2" onClick={onClose}>Cancelar</Button>
+           <Button className="w-1/2" disabled={!amount || !category} onClick={handleSave}>Guardar</Button>
+        </div>
+      </div>
+    </div>
+  );
 }
