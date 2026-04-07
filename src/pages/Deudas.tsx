@@ -1,31 +1,69 @@
 import { useState, useMemo } from "react";
 import { Plus, Zap, Snowflake, X } from "lucide-react";
-import { demoDebts } from "@/lib/demo-data";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 import { DEBT_TYPES, formatQ } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
 
 type Strategy = "snowball" | "avalanche";
 
 export default function Deudas() {
-  const [debts, setDebts] = useState(demoDebts);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [strategy, setStrategy] = useState<Strategy>("snowball");
   const [showForm, setShowForm] = useState(false);
+
+  const { data: debts = [] } = useQuery({
+    queryKey: ["debts", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("debts")
+        .select("*")
+        .eq("user_id", user?.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  const addDebtMutation = useMutation({
+    mutationFn: async (debt: any) => {
+      const { data, error } = await supabase.from("debts").insert({
+        user_id: user?.id,
+        name: debt.name,
+        type: debt.type,
+        current_balance: debt.current_balance,
+        interest_rate: debt.interest_rate,
+        minimum_payment: debt.minimum_payment,
+        payment_day: debt.payment_day,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["debts", user?.id] });
+      toast.success("¡Deuda registrada exitosamente!");
+      setShowForm(false);
+    },
+  });
 
   const sortedDebts = useMemo(() => {
     const sorted = [...debts];
     if (strategy === "snowball") {
-      sorted.sort((a, b) => a.current_balance - b.current_balance);
+      sorted.sort((a, b) => (a.current_balance || 0) - (b.current_balance || 0));
     } else {
-      sorted.sort((a, b) => b.interest_rate - a.interest_rate);
+      sorted.sort((a, b) => (b.interest_rate || 0) - (a.interest_rate || 0));
     }
     return sorted;
   }, [debts, strategy]);
 
-  const totalDebt = useMemo(() => debts.reduce((s, d) => s + d.current_balance, 0), [debts]);
-  const totalMinPayments = useMemo(() => debts.reduce((s, d) => s + d.minimum_payment, 0), [debts]);
+  const totalDebt = useMemo(() => debts.reduce((s, d) => s + (d.current_balance || 0), 0), [debts]);
+  const totalMinPayments = useMemo(() => debts.reduce((s, d) => s + (d.minimum_payment || 0), 0), [debts]);
 
   return (
     <div className="animate-fade-in p-4 pb-24">
@@ -90,7 +128,7 @@ export default function Deudas() {
             <div className="grid grid-cols-3 gap-2 text-center">
               <div>
                 <p className="text-xs text-muted-foreground">Saldo</p>
-                <p className="text-sm font-bold text-foreground">{formatQ(debt.current_balance)}</p>
+                <p className="text-sm font-bold text-foreground">{formatQ(debt.current_balance || 0)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Tasa</p>
@@ -98,7 +136,7 @@ export default function Deudas() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Pago mín.</p>
-                <p className="text-sm font-bold text-foreground">{formatQ(debt.minimum_payment)}</p>
+                <p className="text-sm font-bold text-foreground">{formatQ(debt.minimum_payment || 0)}</p>
               </div>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">Día de pago: {debt.payment_day} de cada mes</p>
@@ -107,9 +145,9 @@ export default function Deudas() {
       </div>
 
       {debts.length === 0 && (
-        <div className="mt-12 text-center">
-          <p className="text-lg font-medium text-foreground">¡Sin deudas! 🎉</p>
-          <p className="text-sm text-muted-foreground mt-1">Eres libre financieramente</p>
+        <div className="mt-6 mb-8 text-center rounded-2xl bg-primary/10 p-6 border border-primary/20">
+          <p className="text-lg font-bold text-primary mb-1">¡Eres libre financieramente! 🎉</p>
+          <p className="text-sm text-foreground">No tienes ni una sola deuda registrada. Sigue construyendo tu futuro con ese gran enfoque en Flowi.</p>
         </div>
       )}
 
@@ -117,10 +155,9 @@ export default function Deudas() {
         <Plus className="h-5 w-5 mr-1" /> Agregar deuda
       </Button>
 
-      {showForm && <NewDebtModal onClose={() => setShowForm(false)} onSave={(debt) => {
-        setDebts((prev) => [...prev, { ...debt, id: Date.now().toString() }]);
-        setShowForm(false);
-      }} />}
+      {showForm && (
+        <NewDebtModal onClose={() => setShowForm(false)} onSave={(d) => addDebtMutation.mutate(d)} />
+      )}
     </div>
   );
 }

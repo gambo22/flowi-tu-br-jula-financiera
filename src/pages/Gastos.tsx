@@ -1,21 +1,75 @@
 import { useState, useMemo } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { demoExpenses } from "@/lib/demo-data";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 import { EXPENSE_CATEGORIES, formatQ } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import AddExpenseModal from "@/components/AddExpenseModal";
+import { toast } from "sonner";
 
 export default function Gastos() {
-  const [expenses, setExpenses] = useState(demoExpenses);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+
+  const { data: expenses = [] } = useQuery({
+    queryKey: ["expenses", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("expenses")
+        .select("*")
+        .eq("user_id", user?.id)
+        .order("date", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  const deleteExpenseMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("expenses").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["expenses", user?.id] });
+      toast.success("Gasto eliminado exitosamente.");
+    },
+  });
+
+  const addExpenseMutation = useMutation({
+    mutationFn: async (expense: any) => {
+      const { data, error } = await supabase.from("expenses").insert({
+        user_id: user?.id,
+        amount: expense.amount,
+        category: expense.category,
+        date: expense.date,
+        note: expense.note,
+        is_recurring: expense.is_recurring,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["expenses", user?.id] });
+      toast.success("¡Gasto registrado con éxito!");
+    },
+  });
 
   const filtered = useMemo(() => {
     const list = filter ? expenses.filter((e) => e.category === filter) : expenses;
     return [...list].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [expenses, filter]);
 
-  const total = useMemo(() => filtered.reduce((s, e) => s + e.amount, 0), [filtered]);
+  // Use the current month's total for the "Total del mes" text
+  const total = useMemo(() => {
+    const today = new Date();
+    return filtered
+      .filter(e => new Date(e.date).getMonth() === today.getMonth() && new Date(e.date).getFullYear() === today.getFullYear())
+      .reduce((s, e) => s + (e.amount || 0), 0);
+  }, [filtered]);
 
   // Group by day
   const grouped = useMemo(() => {
@@ -76,9 +130,9 @@ export default function Gastos() {
                       <p className="text-sm font-medium text-foreground truncate">{exp.note || cat?.label}</p>
                       <p className="text-xs text-muted-foreground">{cat?.label}{exp.is_recurring ? " • Fijo" : ""}</p>
                     </div>
-                    <span className="text-sm font-semibold text-foreground">{formatQ(exp.amount)}</span>
+                    <span className="text-sm font-semibold text-foreground">{formatQ(exp.amount || 0)}</span>
                     <button
-                      onClick={() => setExpenses((prev) => prev.filter((e) => e.id !== exp.id))}
+                      onClick={() => deleteExpenseMutation.mutate(exp.id)}
                       className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -92,9 +146,10 @@ export default function Gastos() {
       </div>
 
       {filtered.length === 0 && (
-        <div className="mt-12 text-center">
-          <p className="text-muted-foreground">No hay gastos registrados aún</p>
-          <p className="text-sm text-muted-foreground mt-1">¡Empieza a registrar para tomar el control! 💪</p>
+        <div className="mt-12 text-center rounded-2xl p-6 bg-primary/5">
+          <p className="text-lg font-medium text-foreground text-primary">¡Billetera reluciente!</p>
+          <p className="text-sm text-muted-foreground mt-2">No hay gastos registrados con este filtro.</p>
+          <p className="text-sm text-muted-foreground mt-1">Lleva el control total de tus fugas de dinero registrando todos tus movimientos diarios de Flowi. 💪</p>
         </div>
       )}
 
@@ -108,12 +163,7 @@ export default function Gastos() {
       <AddExpenseModal
         open={showAdd}
         onClose={() => setShowAdd(false)}
-        onSave={(exp) => {
-          setExpenses((prev) => [
-            { ...exp, id: Date.now().toString(), date: exp.date || new Date().toISOString() },
-            ...prev,
-          ]);
-        }}
+        onSave={(exp) => addExpenseMutation.mutate(exp)}
       />
     </div>
   );

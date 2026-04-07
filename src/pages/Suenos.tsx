@@ -1,25 +1,124 @@
 import { useState, useMemo } from "react";
 import { Plus, TrendingUp, ArrowUp, ArrowDown } from "lucide-react";
-import { demoGoals, demoUser, demoExpenses, demoDebts } from "@/lib/demo-data";
 import { GOAL_TYPES, formatQ } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { X } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/context/AuthContext";
+import { toast } from "sonner";
 
 export default function Suenos() {
-  const [goals, setGoals] = useState(demoGoals);
+  const { profile, user } = useAuth();
+  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
 
-  const user = demoUser;
-  const expenses = demoExpenses;
-  const debts = demoDebts;
+  const { data: goals = [] } = useQuery({
+    queryKey: ["goals", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("goals")
+        .select("*")
+        .eq("user_id", user?.id)
+        .order("priority", { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
 
-  const fixedExpenses = useMemo(() => expenses.filter((e) => e.is_recurring).reduce((s, e) => s + e.amount, 0), []);
-  const variableExpenses = useMemo(() => expenses.filter((e) => !e.is_recurring).reduce((s, e) => s + e.amount, 0), []);
-  const debtPayments = useMemo(() => debts.reduce((s, d) => s + d.minimum_payment, 0), []);
-  const savingsCapacity = user.monthly_income - fixedExpenses - variableExpenses - debtPayments;
+  const { data: expenses = [] } = useQuery({
+    queryKey: ["expenses", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("expenses")
+        .select("*")
+        .eq("user_id", user?.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  const { data: debts = [] } = useQuery({
+    queryKey: ["debts", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("debts")
+        .select("*")
+        .eq("user_id", user?.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  const addGoalMutation = useMutation({
+    mutationFn: async (goal: any) => {
+      const { data, error } = await supabase.from("goals").insert({
+        user_id: user?.id,
+        name: goal.name,
+        type: goal.type,
+        total_amount: goal.total_amount,
+        down_payment: goal.down_payment,
+        monthly_payment: goal.monthly_payment,
+        priority: goals.length + 1,
+        saved_amount: 0,
+        current_saved: 0, // ensuring any variation is nullified 
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["goals", user?.id] });
+      toast.success("¡Meta creada con éxito!");
+      setShowForm(false);
+    },
+  });
+
+  const reorderGoalMutation = useMutation({
+    mutationFn: async (updatedGoals: any[]) => {
+      // Optimizamos una actualización masiva de la prioridad
+      const updates = updatedGoals.map((g, index) => ({
+        id: g.id,
+        priority: index + 1,
+        // needed fields for upsert might be required, but we'll try update
+      }));
+      // Ejecutamos varias actualizaciones
+      await Promise.all(
+        updates.map((u) => supabase.from("goals").update({ priority: u.priority }).eq("id", u.id))
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["goals", user?.id] });
+    },
+  });
+
+  const monthlyIncome = profile?.monthly_income || 0;
+  
+  // Asumiendo gastos mes actual promedios
+  const fixedExpenses = useMemo(() => expenses.filter((e) => e.is_recurring).reduce((s, e) => s + (e.amount || 0), 0), [expenses]);
+  const variableExpenses = useMemo(() => expenses.filter((e) => !e.is_recurring).reduce((s, e) => s + (e.amount || 0), 0), [expenses]);
+  const debtPayments = useMemo(() => debts.reduce((s, d) => s + (d.minimum_payment || 0), 0), [debts]);
+  
+  // Real savings capacity based on total outgos today
+  const savingsCapacity = monthlyIncome - fixedExpenses - variableExpenses - debtPayments;
+
+  const handleReorder = (index: number, direction: 'up' | 'down') => {
+    const newGoals = [...goals];
+    if (direction === 'up' && index > 0) {
+      [newGoals[index - 1], newGoals[index]] = [newGoals[index], newGoals[index - 1]];
+      queryClient.setQueryData(["goals", user?.id], newGoals); // optimistic visual
+      reorderGoalMutation.mutate(newGoals);
+    } else if (direction === 'down' && index < goals.length - 1) {
+      [newGoals[index], newGoals[index + 1]] = [newGoals[index + 1], newGoals[index]];
+      queryClient.setQueryData(["goals", user?.id], newGoals);
+      reorderGoalMutation.mutate(newGoals);
+    }
+  };
 
   return (
     <div className="animate-fade-in p-4 pb-24">
@@ -35,15 +134,16 @@ export default function Suenos() {
         {goals.map((goal, index) => {
           const goalType = GOAL_TYPES.find((t) => t.id === goal.type);
           const Icon = goalType?.icon || TrendingUp;
-          const target = goal.down_payment || goal.total_amount;
-          const pct = Math.round((goal.saved_amount / target) * 100);
-          const remaining = target - goal.saved_amount;
+          const target = goal.down_payment || goal.total_amount || 1;
+          const currentSaved = goal.current_saved || goal.saved_amount || 0;
+          const pct = Math.round((currentSaved / target) * 100);
+          const remaining = target - currentSaved;
           const monthsLeft = savingsCapacity > 0 ? Math.ceil(remaining / savingsCapacity) : Infinity;
 
           const viability = monthsLeft <= 12 ? "green" : monthsLeft <= 24 ? "yellow" : "red";
 
           return (
-            <div key={goal.id} className="rounded-2xl bg-card p-4 border border-border">
+            <div key={goal.id} className="rounded-2xl bg-card p-4 border border-border shadow-sm">
               <div className="mb-3 flex items-center gap-3">
                 <div className={cn(
                   "flex h-10 w-10 items-center justify-center rounded-xl",
@@ -55,29 +155,17 @@ export default function Suenos() {
                 </div>
                 <div className="flex-1">
                   <p className="font-semibold text-foreground">{goal.name}</p>
-                  <p className="text-xs text-muted-foreground">{goalType?.label} • Prioridad {goal.priority}</p>
+                  <p className="text-xs text-muted-foreground">{goalType?.label} • Prioridad {goal.priority || index + 1}</p>
                 </div>
                 <div className="flex flex-col gap-1">
                   <button
-                    onClick={() => {
-                      if (index > 0) {
-                        const newGoals = [...goals];
-                        [newGoals[index - 1], newGoals[index]] = [newGoals[index], newGoals[index - 1]];
-                        setGoals(newGoals);
-                      }
-                    }}
+                    onClick={() => handleReorder(index, 'up')}
                     className="rounded p-0.5 text-muted-foreground hover:text-foreground"
                   >
                     <ArrowUp className="h-3.5 w-3.5" />
                   </button>
                   <button
-                    onClick={() => {
-                      if (index < goals.length - 1) {
-                        const newGoals = [...goals];
-                        [newGoals[index], newGoals[index + 1]] = [newGoals[index + 1], newGoals[index]];
-                        setGoals(newGoals);
-                      }
-                    }}
+                    onClick={() => handleReorder(index, 'down')}
                     className="rounded p-0.5 text-muted-foreground hover:text-foreground"
                   >
                     <ArrowDown className="h-3.5 w-3.5" />
@@ -89,7 +177,7 @@ export default function Suenos() {
                 <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
               </div>
               <div className="mb-3 flex items-center justify-between text-xs text-muted-foreground">
-                <span>{formatQ(goal.saved_amount)} de {formatQ(target)}</span>
+                <span>{formatQ(currentSaved)} de {formatQ(target)}</span>
                 <span>{pct}%</span>
               </div>
 
@@ -100,14 +188,14 @@ export default function Suenos() {
                 viability === "yellow" ? "bg-warning/10 text-warning" :
                 "bg-destructive/10 text-destructive"
               )}>
-                {viability === "green" && `🎉 ¡Ya puedes darte ese gusto! En ${monthsLeft} meses lo tienes.`}
+                {viability === "green" && `🎉 ¡Ya puedes darte ese gusto! En ${monthsLeft === Infinity ? 'unos' : monthsLeft} meses lo tienes.`}
                 {viability === "yellow" && `💪 Es posible. Con disciplina, en ${monthsLeft} meses llegas.`}
-                {viability === "red" && `🌱 Hoy no es el momento ideal, pero si aumentas tus ahorros, se puede lograr.`}
+                {viability === "red" && `🌱 Hoy parece lejos. Registra tus gastos y encuentra fugas para aumentar tu capacidad de ahorro.`}
               </div>
 
               {goal.monthly_payment > 0 && (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Cuota post-compra: {formatQ(goal.monthly_payment)}/mes
+                  Cuota mensual tras la meta: {formatQ(goal.monthly_payment)}/mes
                 </p>
               )}
             </div>
@@ -116,21 +204,24 @@ export default function Suenos() {
       </div>
 
       {goals.length === 0 && (
-        <div className="mt-12 text-center">
-          <p className="text-lg font-medium text-foreground">¿Cuál es tu sueño?</p>
-          <p className="text-sm text-muted-foreground mt-1">Agrega tu primera meta y Flowi te ayuda a llegar</p>
+        <div className="mt-12 mb-8 text-center bg-accent/5 py-8 rounded-3xl border border-accent/20">
+          <TrendingUp className="h-10 w-10 mx-auto text-accent mb-3 opacity-80" />
+          <p className="text-lg font-medium text-foreground">¿Cuál es tu máximo sueño?</p>
+          <p className="text-sm text-muted-foreground mt-2 px-6">Agrega tu primer objetivo y deja que Flowi calcule inteligentemente para cuándo podrías tenerlo 🚀.</p>
         </div>
       )}
 
       <Button onClick={() => setShowForm(true)} className="w-full" size="lg">
-        <Plus className="h-5 w-5 mr-1" /> Nueva meta
+        <Plus className="h-5 w-5 mr-1" /> Nuevo Sueño
       </Button>
 
       {/* New goal modal */}
-      {showForm && <NewGoalModal onClose={() => setShowForm(false)} onSave={(goal) => {
-        setGoals((prev) => [...prev, { ...goal, id: Date.now().toString(), priority: prev.length + 1, saved_amount: 0 }]);
-        setShowForm(false);
-      }} />}
+      {showForm && (
+        <NewGoalModal 
+          onClose={() => setShowForm(false)} 
+          onSave={(g) => addGoalMutation.mutate(g)} 
+        />
+      )}
     </div>
   );
 }
@@ -155,7 +246,7 @@ function NewGoalModal({ onClose, onSave }: { onClose: () => void; onSave: (g: an
         <div className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-muted-foreground">Nombre de tu meta</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Mi primer carro" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Mi primer carro o Viaje" />
           </div>
 
           <div>
@@ -205,7 +296,6 @@ function NewGoalModal({ onClose, onSave }: { onClose: () => void; onSave: (g: an
               total_amount: parseFloat(totalAmount) || 0,
               down_payment: hasDownPayment ? parseFloat(downPayment) || 0 : 0,
               monthly_payment: hasMonthly ? parseFloat(monthlyPayment) || 0 : 0,
-              target_date: null,
             })}
             className="w-full"
             size="lg"
