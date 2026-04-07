@@ -4,15 +4,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { EXPENSE_CATEGORIES, formatQ } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { Edit2, X } from "lucide-react";
+import { Edit2, X, Plus, AlertCircle, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
 export default function Presupuesto() {
   const { profile, user, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
   const [editingCat, setEditingCat] = useState<string | null>(null);
+  const [addingLimit, setAddingLimit] = useState(false);
   const [editingIncome, setEditingIncome] = useState(false);
 
   const { data: expenses = [] } = useQuery({
@@ -64,7 +66,7 @@ export default function Presupuesto() {
     },
     onSuccess: () => {
       refreshProfile();
-      toast.success("Salario actualizado exitosamente.");
+      toast.success("Ingreso actualizado exitosamente.");
       setEditingIncome(false);
     },
   });
@@ -82,14 +84,16 @@ export default function Presupuesto() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["budgetLimits", user?.id] });
-      toast.success("Límite actualizado.");
+      toast.success("Límite guardado correctamente.");
       setEditingCat(null);
+      setAddingLimit(false);
     },
   });
 
   const monthlyIncome = profile?.monthly_income || 0;
+  const hasIncomeConfigured = monthlyIncome > 0;
 
-  // Calculamos solo base al mes actual
+  // Calculamos solo en base al mes actual
   const today = new Date();
   const currentMonthExpenses = expenses.filter(e => {
     const d = new Date(e.date);
@@ -108,7 +112,7 @@ export default function Presupuesto() {
     return map;
   }, [currentMonthExpenses]);
 
-  // Active limits mixed with all available categories to allow user picking
+  // Active limits mixed with categories where money has been spent
   const displayCategories = EXPENSE_CATEGORIES.filter(cat => {
     const hasLimit = budgetLimits.some(bl => bl.category === cat.id);
     const hasSpent = (spentByCategory[cat.id] || 0) > 0;
@@ -118,6 +122,19 @@ export default function Presupuesto() {
   return (
     <div className="animate-fade-in p-4 pb-24">
       <h1 className="mb-4 text-2xl font-bold text-foreground">Presupuesto</h1>
+
+      {!hasIncomeConfigured && (
+        <button 
+          onClick={() => setEditingIncome(true)}
+          className="mb-5 w-full flex items-center gap-3 rounded-2xl bg-primary/10 p-4 border border-primary/20 hover:bg-primary/15 transition-all text-left"
+        >
+          <AlertCircle className="h-6 w-6 text-primary flex-shrink-0" />
+          <div className="flex-1">
+            <h3 className="text-sm font-bold text-primary">Configura tu ingreso base</h3>
+            <p className="text-xs text-foreground mt-0.5">Sin esto, Flowi no puede calcular cuánto te queda disponible ni orientarte con tus deudas.</p>
+          </div>
+        </button>
+      )}
 
       {/* Summary cards */}
       <div className="mb-5 grid grid-cols-2 gap-3">
@@ -137,7 +154,7 @@ export default function Presupuesto() {
           <p className="text-xs text-muted-foreground">En metas a futuro</p>
           <p className="text-lg font-bold text-accent">{formatQ(goalsCommitted)}</p>
         </div>
-        <div className={cn("rounded-xl p-3 border border-border", available >= 0 ? "bg-primary/10" : "bg-destructive/10")}>
+        <div className={cn("rounded-xl p-3 border border-border", (available >= 0 || !hasIncomeConfigured) ? "bg-primary/10" : "bg-destructive/10")}>
           <p className="text-xs text-muted-foreground">Disponible hoy</p>
           <p className={cn("text-lg font-bold", available >= 0 ? "text-primary" : "text-destructive")}>
             {formatQ(available)}
@@ -146,18 +163,18 @@ export default function Presupuesto() {
       </div>
 
       <div className="flex justify-between items-center mb-3">
-        <h3 className="text-sm font-semibold text-foreground">Topes Categorizados</h3>
+        <h3 className="text-sm font-semibold text-foreground">Tus Topes</h3>
         <p className="text-xs text-muted-foreground italic">Toca una categoría para editarla</p>
       </div>
 
       {/* Category budget list */}
       {displayCategories.length === 0 ? (
-        <div className="mt-8 text-center rounded-2xl bg-card p-6 border border-border shadow-sm">
+        <div className="mt-8 mb-6 text-center rounded-2xl bg-card p-6 border border-border shadow-sm">
           <p className="text-sm font-medium text-foreground">Aún no has configurado tus topes</p>
-          <p className="text-xs text-muted-foreground mt-2">Crear límites mensuales en categorías como "Comida" o "Transporte" evitará que te pases. Registra un gasto o toca "Añadir Categoría" pronto y retoma el control.</p>
+          <p className="text-xs text-muted-foreground mt-2">Crear límites mensuales en categorías como "Comida" o "Transporte" evitará que te pases o gastes de más.</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 mb-6">
           {displayCategories.map((cat) => {
             const Icon = cat.icon;
             const limitRow = budgetLimits.find((bl) => bl.category === cat.id);
@@ -179,7 +196,7 @@ export default function Presupuesto() {
                   <div className="flex-1">
                     <p className="text-sm font-medium text-foreground">{cat.label}</p>
                     <p className="text-xs text-muted-foreground">
-                      {formatQ(spent)} de {monthlyLimit > 0 ? formatQ(monthlyLimit) : "Ilimitado"}
+                      {formatQ(spent)} de {monthlyLimit > 0 ? formatQ(monthlyLimit) : "Ilimitado / Sin tope"}
                     </p>
                   </div>
                   {monthlyLimit > 0 && (
@@ -206,6 +223,17 @@ export default function Presupuesto() {
         </div>
       )}
 
+      {/* Agregar Nueva Categoría Independiente al Flujo */}
+      <Button 
+        onClick={() => setAddingLimit(true)} 
+        className="w-full mt-2" 
+        variant="outline" 
+        size="lg"
+      >
+        <Plus className="h-5 w-5 mr-1" />
+        Agregar nueva categoría a vigilar
+      </Button>
+
       {/* Income Modal */}
       {editingIncome && (
         <EditIncomeModal 
@@ -215,7 +243,7 @@ export default function Presupuesto() {
         />
       )}
 
-      {/* Limit Modal */}
+      {/* Edit Existing Limit Modal */}
       {editingCat && (
         <EditLimitModal 
           category={EXPENSE_CATEGORIES.find(c => c.id === editingCat)!}
@@ -224,33 +252,45 @@ export default function Presupuesto() {
           onSave={(val) => upsertLimitMutation.mutate({ category: editingCat, limitAmt: val })}
         />
       )}
+
+      {/* Add New Limit Modal */}
+      {addingLimit && (
+        <AddCategoryLimitModal 
+          configuredCats={budgetLimits.map((b) => b.category)}
+          onClose={() => setAddingLimit(false)}
+          onSave={(category, limitAmt) => upsertLimitMutation.mutate({ category, limitAmt })}
+        />
+      )}
     </div>
   );
 }
 
+// ------------------------------------ MODALS ------------------------------------ //
+
 function EditIncomeModal({ initial, onClose, onSave }: { initial: number, onClose: () => void, onSave: (v: number) => void }) {
-  const [val, setVal] = useState(initial.toString());
+  const [val, setVal] = useState(initial ? initial.toString() : "");
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
       <div className="animate-fade-in w-full max-w-sm rounded-2xl bg-card p-6 border border-border shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-foreground">Editar Ingreso Promedio</h2>
+          <h2 className="text-lg font-bold text-foreground">Ingreso Promedio Mensual</h2>
           <button onClick={onClose} className="rounded-full p-1 hover:bg-muted"><X className="h-5 w-5 text-muted-foreground" /></button>
         </div>
         <div className="mb-6">
-          <label className="mb-2 block text-sm font-medium text-muted-foreground">Tu salario o ingreso esperado mensual</label>
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">Tu salario neto o ingreso regular por mes</label>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">Q</span>
             <input
               type="number"
               value={val}
               onChange={(e) => setVal(e.target.value)}
+              placeholder="0.00"
               className="w-full rounded-xl bg-background border border-border py-3 pl-8 pr-4 text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
               autoFocus
             />
           </div>
         </div>
-        <Button className="w-full" onClick={() => onSave(parseFloat(val) || 0)} disabled={!val}>Guardar Ingreso</Button>
+        <Button className="w-full" onClick={() => onSave(parseFloat(val) || 0)} disabled={!val}>Guardar Monto</Button>
       </div>
     </div>
   )
@@ -268,7 +308,7 @@ function EditLimitModal({ category, initialLimit, onClose, onSave }: { category:
           </div>
           <button onClick={onClose} className="rounded-full p-1 hover:bg-muted"><X className="h-5 w-5 text-muted-foreground" /></button>
         </div>
-        <div className="mb-6">
+        <div className="mb-6 text-left">
           <label className="mb-2 block text-sm font-medium text-muted-foreground">Límite mensual máximo permitido</label>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">Q</span>
@@ -286,4 +326,66 @@ function EditLimitModal({ category, initialLimit, onClose, onSave }: { category:
       </div>
     </div>
   )
+}
+
+function AddCategoryLimitModal({ configuredCats, onClose, onSave }: { configuredCats: string[], onClose: () => void, onSave: (cat: string, limit: number) => void }) {
+  const availableCats = EXPENSE_CATEGORIES.filter(c => !configuredCats.includes(c.id));
+  const [selectedCat, setSelectedCat] = useState<string>(availableCats.length > 0 ? availableCats[0].id : "");
+  const [limit, setLimit] = useState("");
+
+  if (availableCats.length === 0) {
+    return (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
+        <div className="animate-fade-in w-full max-w-sm rounded-2xl bg-card p-6 text-center border border-border shadow-2xl">
+          <Settings className="h-10 w-10 text-primary mx-auto mb-3" />
+          <h2 className="text-lg font-bold text-foreground mb-2">Todo en tu radar</h2>
+          <p className="text-sm text-muted-foreground mb-4">Parece que ya has puesto un techo (límite) a todas las categorías que Flowi ofrece de fábrica.</p>
+          <Button className="w-full" onClick={onClose}>Volver</Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
+      <div className="animate-fade-in w-full max-w-sm rounded-2xl bg-card p-6 border border-border shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-foreground">Agregar Límite</h2>
+          <button onClick={onClose} className="rounded-full p-1 hover:bg-muted"><X className="h-5 w-5 text-muted-foreground" /></button>
+        </div>
+        <div className="space-y-4 mb-6">
+          <div className="text-left">
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">¿Qué rubro quieres limitar?</label>
+            <Select value={selectedCat} onValueChange={setSelectedCat}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecciona una cateogría" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[300px]">
+                {availableCats.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="text-left">
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">Tope recomendado o meta máxima a gastar (Q)</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">Q</span>
+              <input
+                type="number"
+                value={limit}
+                onChange={(e) => setLimit(e.target.value)}
+                placeholder="Ex. 1500"
+                className="w-full rounded-xl bg-background border border-border py-3 pl-8 pr-4 text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+              />
+            </div>
+          </div>
+        </div>
+        <Button className="w-full" onClick={() => onSave(selectedCat, parseFloat(limit) || 0)} disabled={!limit || !selectedCat}>Confirmar Límite</Button>
+      </div>
+    </div>
+  );
 }

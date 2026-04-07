@@ -11,6 +11,7 @@ import Gastos from "./pages/Gastos";
 import Presupuesto from "./pages/Presupuesto";
 import Suenos from "./pages/Suenos";
 import Deudas from "./pages/Deudas";
+import Perfil from "./pages/Perfil";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Onboarding from "./pages/Onboarding";
@@ -36,6 +37,7 @@ function AppLayout() {
             <Route path="/presupuesto" element={<Presupuesto />} />
             <Route path="/suenos" element={<Suenos />} />
             <Route path="/deudas" element={<Deudas />} />
+            <Route path="/perfil" element={<Perfil />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />

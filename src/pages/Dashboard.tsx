@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Plus, TrendingUp, Lightbulb } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { EXPENSE_CATEGORIES, INSIGHTS, formatQ } from "@/lib/constants";
@@ -95,9 +96,14 @@ export default function Dashboard() {
   return (
     <div className="animate-fade-in space-y-5 p-4 pb-24">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Hola, {userName} 👋</h1>
-        <p className="text-sm capitalize text-muted-foreground">{dateStr}</p>
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Hola, {userName} 👋</h1>
+          <p className="text-sm capitalize text-muted-foreground">{dateStr}</p>
+        </div>
+        <Link to="/perfil" className="h-12 w-12 flex items-center justify-center rounded-full bg-primary/10 text-primary transition-transform hover:scale-105 border border-primary/20 shadow-sm">
+           <span className="font-bold text-lg">{userName.charAt(0).toUpperCase()}</span>
+        </Link>
       </div>
 
       {/* Available money card */}
