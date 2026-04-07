@@ -1,24 +1,30 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
-  ArrowRight, ArrowLeft, CheckCircle2, ChevronRight, Calculator,
+  ArrowRight, CheckCircle2, ChevronRight, Calculator,
   Car, Home, MapPin, Tablet, Smartphone, ShieldCheck, Star, 
   Wallet, DollarSign, Target, Plus, X
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { EXPENSE_CATEGORIES, GOAL_TYPES, formatQ } from "@/lib/constants";
+import { Switch } from "@/components/ui/switch";
 
-type IncomeType = "fixed" | "variable" | "mixed";
+type IncomeFrequency = "monthly" | "biweekly" | "weekly" | "variable";
 
 interface OnboardingState {
   name: string;
-  incomeType: IncomeType;
-  incomeFixed: string;
-  incomeMin: string;
-  incomeMax: string;
-  incomeBase: string;
-  incomeExtras: string;
+  incomeFrequency: IncomeFrequency;
+  incomePeriod1: string;
+  incomePeriod2: string;
+  incomePeriod3: string;
+  incomePeriod4: string;
+  hasDifferentMonth: boolean;
+  incomeThisMonth: string;
+  paymentDayType: string;
+  paymentDay1: string;
+  paymentDay2: string;
+
   expenses: { id: string; categoryId: string; amount: string; name: string }[];
   goalType: string | null;
   goalName: string;
@@ -26,7 +32,7 @@ interface OnboardingState {
 }
 
 const COMMON_EXPENSES = [
-  { id: "renta", label: "Renta/Hipoteca", cat: "vivienda" }, // Using "otros" or similar if missing, EXPENSE_CATEGORIES has "otros", "servicios", let's map loosely
+  { id: "renta", label: "Renta/Hipoteca", cat: "vivienda" },
   { id: "luz", label: "Agua/Luz", cat: "servicios" },
   { id: "internet", label: "Internet", cat: "servicios" },
   { id: "celular", label: "Plan Celular", cat: "servicios" },
@@ -45,12 +51,16 @@ export default function Onboarding() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<OnboardingState>({
     name: profile?.name || "",
-    incomeType: "fixed",
-    incomeFixed: "",
-    incomeMin: "",
-    incomeMax: "",
-    incomeBase: "",
-    incomeExtras: "",
+    incomeFrequency: "monthly",
+    incomePeriod1: "",
+    incomePeriod2: "",
+    incomePeriod3: "",
+    incomePeriod4: "",
+    hasDifferentMonth: false,
+    incomeThisMonth: "",
+    paymentDayType: "last_business_day",
+    paymentDay1: "",
+    paymentDay2: "",
     expenses: [],
     goalType: null,
     goalName: "",
@@ -62,42 +72,51 @@ export default function Onboarding() {
   };
 
   const nextStep = () => setStep((s) => Math.min(s + 1, 4));
-  const prevStep = () => setStep((s) => Math.max(s - 1, 1));
+
+  const getCalculatedMonthlyIncome = () => {
+    const p1 = Number(data.incomePeriod1) || 0;
+    const p2 = Number(data.incomePeriod2) || 0;
+    const p3 = Number(data.incomePeriod3) || 0;
+    const p4 = Number(data.incomePeriod4) || 0;
+    if (data.incomeFrequency === "variable") return (p1 + p2) / 2;
+    return p1 + p2 + p3 + p4;
+  };
 
   const handleFinish = async (skipGoal = false) => {
     if (!user) return;
     setLoading(true);
 
     try {
-      // 1. Calcular el ingreso mensual estructurado
-      let monthlyIncome = 0;
-      let min = null;
-      let max = null;
+      const p1 = Number(data.incomePeriod1) || 0;
+      const p2 = Number(data.incomePeriod2) || 0;
+      const p3 = Number(data.incomePeriod3) || 0;
+      const p4 = Number(data.incomePeriod4) || 0;
+      const calcMonthly = getCalculatedMonthlyIncome();
+      const thisMonth = data.hasDifferentMonth && Number(data.incomeThisMonth) > 0 ? Number(data.incomeThisMonth) : null;
 
-      if (data.incomeType === "fixed") {
-        monthlyIncome = Number(data.incomeFixed) || 0;
-      } else if (data.incomeType === "variable") {
-        min = Number(data.incomeMin) || 0;
-        max = Number(data.incomeMax) || 0;
-        monthlyIncome = (min + max) / 2;
-      } else if (data.incomeType === "mixed") {
-        monthlyIncome = (Number(data.incomeBase) || 0) + (Number(data.incomeExtras) || 0);
-      }
+      // Ensure day parsing
+      const d1 = parseInt(data.paymentDay1) || null;
+      const d2 = parseInt(data.paymentDay2) || null;
 
-      // 2. Insertar configuración del perfil
       const { error: userError } = await supabase.from("users").upsert({
         id: user.id,
         name: data.name,
-        monthly_income: monthlyIncome,
-        income_type: data.incomeType,
-        income_min: min,
-        income_max: max,
+        income_frequency: data.incomeFrequency,
+        income_period_1: p1,
+        income_period_2: p2,
+        income_period_3: p3,
+        income_period_4: p4,
+        monthly_income: calcMonthly,
+        income_this_month: thisMonth,
+        payment_day_type: data.paymentDayType,
+        payment_day_1: d1,
+        payment_day_2: d2,
         onboarding_complete: true,
       });
 
       if (userError) throw userError;
 
-      // 3. Insertar gastos fijos
+      // Gastos
       if (data.expenses.length > 0) {
         const expensesToInsert = data.expenses.map((e) => ({
           user_id: user.id,
@@ -107,11 +126,10 @@ export default function Onboarding() {
           date: new Date().toISOString(),
           is_recurring: true,
         }));
-        // Insert expenses to db
         await supabase.from("expenses").insert(expensesToInsert);
       }
 
-      // 4. Insertar meta
+      // Meta
       if (!skipGoal && data.goalType && data.goalName && data.goalAmount) {
         await supabase.from("goals").insert({
           user_id: user.id,
@@ -123,7 +141,6 @@ export default function Onboarding() {
         });
       }
 
-      // 5. Finalizar
       await refreshProfile();
       navigate("/", { replace: true });
     } catch (err) {
@@ -133,456 +150,217 @@ export default function Onboarding() {
     }
   };
 
-  // Validación rápida para avanzar
   const isStep1Valid = data.name.trim().length > 0;
   let isStep2Valid = false;
-  if (data.incomeType === "fixed") isStep2Valid = Number(data.incomeFixed) > 0;
-  if (data.incomeType === "variable") isStep2Valid = Number(data.incomeMin) > 0 && Number(data.incomeMax) > 0;
-  if (data.incomeType === "mixed") isStep2Valid = Number(data.incomeBase) > 0;
+  if (data.incomeFrequency === "monthly") isStep2Valid = Number(data.incomePeriod1) > 0;
+  if (data.incomeFrequency === "biweekly") isStep2Valid = Number(data.incomePeriod1) > 0 && Number(data.incomePeriod2) > 0;
+  if (data.incomeFrequency === "weekly") isStep2Valid = Number(data.incomePeriod1) > 0;
+  if (data.incomeFrequency === "variable") isStep2Valid = Number(data.incomePeriod1) > 0; // At least best month
 
-  const isStep4Valid = data.goalType && data.goalName && Number(data.goalAmount) > 0;
-
-  // Render components
   return (
     <div className="flex min-h-screen flex-col bg-background p-6">
       {/* Progress Bar */}
       <div className="mb-8 mt-2 flex items-center justify-between gap-2">
         <div className="flex flex-1 items-center gap-2">
           {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className={`h-2 flex-1 rounded-full transition-colors duration-500 ${
-                step >= i ? "bg-primary" : "bg-muted"
-              }`}
-            />
+            <div key={i} className={`h-2 flex-1 rounded-full ${step >= i ? "bg-primary" : "bg-muted"}`} />
           ))}
         </div>
-        <span className="text-xs font-semibold text-muted-foreground ml-2">
-          {step}/4
-        </span>
+        <span className="text-xs font-semibold text-muted-foreground ml-2">{step}/4</span>
       </div>
 
-      <div className="flex-1 animate-fade-in relative">
-        {/* STEP 1: Bienvenida */}
+      <div className="flex-1 animate-fade-in relative pb-32">
         {step === 1 && (
           <div className="animate-slide-up space-y-6">
-            <div className="text-left">
-              <h1 className="text-3xl font-extrabold text-foreground">
-                Hola, soy Flowi 👋
-              </h1>
-              <p className="mt-2 text-base text-muted-foreground">
-                Tu compañero de libertad financiera. Vamos a configurar tu espacio en menos de 2 minutos.
-              </p>
-            </div>
-
-            <div className="space-y-4 pt-6">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">
-                  ¿Cómo te llamas?
-                </label>
-                <input
-                  type="text"
-                  value={data.name}
-                  onChange={(e) => updateData({ name: e.target.value })}
-                  placeholder="Ej. María"
-                  className="w-full rounded-2xl border border-border bg-card px-5 py-4 text-base text-foreground shadow-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  autoFocus
-                />
-              </div>
-            </div>
-
-            <div className="fixed bottom-6 left-6 right-6 max-w-lg mx-auto">
-              <button
-                onClick={nextStep}
-                disabled={!isStep1Valid}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-4 text-base font-semibold text-white shadow-lg transition-all hover:bg-primary/90 disabled:opacity-50 disabled:shadow-none"
-              >
-                Empecemos <ArrowRight className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 2: Ingresos */}
-        {step === 2 && (
-          <div className="animate-slide-up space-y-6 pb-24">
-            <div className="text-left">
-              <h1 className="text-2xl font-bold text-foreground">
-                ¿Cómo es tu ingreso mensual?
-              </h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Flowi se adapta a tu estilo de vida, ya sea fijo o emprendedor.
-              </p>
-            </div>
-
-            {/* Income Type Selector */}
-            <div className="space-y-3 pt-2">
-              <button
-                onClick={() => updateData({ incomeType: "fixed" })}
-                className={`w-full flex items-center gap-4 rounded-2xl border p-4 text-left transition-all ${
-                  data.incomeType === "fixed" ? "border-primary bg-primary/10 ring-2 ring-primary/20" : "border-border bg-card hover:bg-muted/50"
-                }`}
-              >
-                <div className={`p-3 rounded-xl ${data.incomeType === "fixed" ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>
-                  <Wallet className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-foreground">Fijo</h3>
-                  <p className="text-xs text-muted-foreground">Sueldo estable cada mes</p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => updateData({ incomeType: "variable" })}
-                className={`w-full flex items-center gap-4 rounded-2xl border p-4 text-left transition-all ${
-                  data.incomeType === "variable" ? "border-primary bg-primary/10 ring-2 ring-primary/20" : "border-border bg-card hover:bg-muted/50"
-                }`}
-              >
-                <div className={`p-3 rounded-xl ${data.incomeType === "variable" ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>
-                  <Calculator className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-foreground">Variable</h3>
-                  <p className="text-xs text-muted-foreground">Freelancer, negocio, comisiones</p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => updateData({ incomeType: "mixed" })}
-                className={`w-full flex items-center gap-4 rounded-2xl border p-4 text-left transition-all ${
-                  data.incomeType === "mixed" ? "border-primary bg-primary/10 ring-2 ring-primary/20" : "border-border bg-card hover:bg-muted/50"
-                }`}
-              >
-                <div className={`p-3 rounded-xl ${data.incomeType === "mixed" ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>
-                  <DollarSign className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-foreground">Mixto</h3>
-                  <p className="text-xs text-muted-foreground">Sueldo base + extras</p>
-                </div>
-              </button>
-            </div>
-
-            {/* Income Inputs based on type */}
-            <div className="animate-fade-in bg-card border border-border rounded-2xl p-4 shadow-sm mt-4">
-              {data.incomeType === "fixed" && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">¿Cuánto recibes al mes?</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">Q</span>
-                    <input
-                      type="number"
-                      value={data.incomeFixed}
-                      onChange={(e) => updateData({ incomeFixed: e.target.value })}
-                      placeholder="8000"
-                      className="w-full rounded-xl bg-background border border-border py-3 pl-10 pr-4 text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {data.incomeType === "variable" && (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">¿Cuánto recibes en un mes bueno?</label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">Q</span>
-                      <input
-                        type="number"
-                        value={data.incomeMax}
-                        onChange={(e) => updateData({ incomeMax: e.target.value })}
-                        placeholder="12000"
-                        className="w-full rounded-xl bg-background border border-border py-3 pl-10 pr-4 text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">¿Cuánto recibes en un mes malo?</label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">Q</span>
-                      <input
-                        type="number"
-                        value={data.incomeMin}
-                        onChange={(e) => updateData({ incomeMin: e.target.value })}
-                        placeholder="4000"
-                        className="w-full rounded-xl bg-background border border-border py-3 pl-10 pr-4 text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {data.incomeType === "mixed" && (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">Tu sueldo base mensual</label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">Q</span>
-                      <input
-                        type="number"
-                        value={data.incomeBase}
-                        onChange={(e) => updateData({ incomeBase: e.target.value })}
-                        placeholder="5000"
-                        className="w-full rounded-xl bg-background border border-border py-3 pl-10 pr-4 text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">Promedio de extras al mes</label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">Q</span>
-                      <input
-                        type="number"
-                        value={data.incomeExtras}
-                        onChange={(e) => updateData({ incomeExtras: e.target.value })}
-                        placeholder="2500"
-                        className="w-full rounded-xl bg-background border border-border py-3 pl-10 pr-4 text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="fixed bottom-6 left-6 right-6 max-w-lg mx-auto flex gap-3">
-              <button
-                onClick={prevStep}
-                className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground transition-all hover:bg-muted/80"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <button
-                onClick={nextStep}
-                disabled={!isStep2Valid}
-                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-4 font-semibold text-white shadow-[0_8px_30px_rgb(16,185,129,0.3)] transition-all hover:bg-primary/90 disabled:opacity-50 disabled:shadow-none"
-              >
-                Continuar <ChevronRight className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 3: Gastos Fijos */}
-        {step === 3 && (
-          <div className="animate-slide-up space-y-6 pb-28">
-            <div className="text-left">
-              <h1 className="text-2xl font-bold text-foreground">
-                Tus gastos recurrentes
-              </h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                ¿Qué pagos haces cada mes sagradamente? Agrégalos para que Flowi te los descuente automáticamente.
-              </p>
-            </div>
-
-            {/* Sugerencias Rápidas */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wide uppercase">Sugerencias rápidas</p>
-              <div className="flex flex-wrap gap-2">
-                {COMMON_EXPENSES.map((preset) => {
-                  const alreadyAdded = data.expenses.some(e => e.name === preset.label);
-                  return (
-                    <button
-                      key={preset.id}
-                      onClick={() => {
-                        if (alreadyAdded) return;
-                        updateData({
-                          expenses: [
-                            ...data.expenses,
-                            { id: Date.now().toString(), categoryId: preset.cat, name: preset.label, amount: "" },
-                          ],
-                        });
-                      }}
-                      disabled={alreadyAdded}
-                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-                        alreadyAdded ? "bg-muted text-muted-foreground/40" : "bg-card border border-border text-foreground hover:border-primary"
-                      }`}
-                    >
-                      {preset.label} {alreadyAdded && "✓"}
-                    </button>
-                  );
-                })}
-              </div>
+              <h1 className="text-3xl font-extrabold text-foreground">Hola, soy Flowi 👋</h1>
+              <p className="mt-2 text-base text-muted-foreground">Tu compañero financiero. ¿Cómo te llamas?</p>
+            </div>
+            <input
+              type="text"
+              value={data.name}
+              onChange={(e) => updateData({ name: e.target.value })}
+              placeholder="Ej. María"
+              className="w-full rounded-2xl border border-border bg-card px-5 py-4 text-base focus:border-primary outline-none"
+              autoFocus
+            />
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="animate-slide-up space-y-6">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">¿Cómo recibes tus pagos?</h1>
             </div>
 
-            {/* Lista de gastos agregados */}
-            <div className="space-y-3 pt-2">
-              {data.expenses.map((expense, index) => (
-                <div key={expense.id} className="animate-scale-in flex items-center gap-3 bg-card border border-border p-3 rounded-2xl">
-                  <div className="flex-1 space-y-1">
-                    <input 
-                      type="text" 
-                      value={expense.name} 
-                      onChange={(e) => {
-                        const newExps = [...data.expenses];
-                        newExps[index].name = e.target.value;
-                        updateData({ expenses: newExps });
-                      }}
-                      placeholder="Nombre del gasto"
-                      className="w-full bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground/60"
-                    />
-                    <div className="flex text-xs text-muted-foreground items-center">
-                      <span>Categoría: </span>
-                      <select 
-                        className="bg-transparent outline-none ml-1 text-primary cursor-pointer"
-                        value={expense.categoryId}
-                        onChange={(e) => {
-                          const newExps = [...data.expenses];
-                          newExps[index].categoryId = e.target.value;
-                          updateData({ expenses: newExps });
-                        }}
-                      >
-                        {EXPENSE_CATEGORIES.map(c => (
-                          <option key={c.id} value={c.id}>{c.label}</option>
-                        ))}
-                      </select>
+            <div className="grid grid-cols-2 gap-3">
+              {[{id:'monthly', l:'Mensual'}, {id:'biweekly', l:'Quincenal'}, {id:'weekly', l:'Semanal'}, {id:'variable', l:'Variable'}].map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => updateData({ incomeFrequency: t.id as IncomeFrequency, incomePeriod1:'', incomePeriod2:'', incomePeriod3:'', incomePeriod4:'' })}
+                  className={`p-3 rounded-xl border text-sm font-semibold transition-all ${data.incomeFrequency === t.id ? 'bg-primary text-white border-primary' : 'bg-card text-foreground border-border'}`}
+                >
+                  {t.l}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-4 bg-muted/30 p-4 rounded-xl border border-border">
+              {data.incomeFrequency === "monthly" && (
+                <>
+                  <label className="text-sm font-medium">¿Cuánto recibes al mes?</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">Q</span>
+                    <input type="number" value={data.incomePeriod1} onChange={(e) => updateData({incomePeriod1: e.target.value})} className="w-full rounded-xl bg-card border border-border py-3 pl-8 pr-4 outline-none focus:border-primary" />
+                  </div>
+                  <label className="text-sm font-medium mt-3 block">¿Cuándo te pagan?</label>
+                  <select value={data.paymentDayType} onChange={(e) => updateData({ paymentDayType: e.target.value })} className="w-full rounded-xl bg-card border border-border py-3 px-3">
+                    <option value="last_business_day">Último día hábil del mes</option>
+                    <option value="fixed_day">Un día fijo específico</option>
+                  </select>
+                  {data.paymentDayType === "fixed_day" && (
+                    <input type="number" placeholder="Día (ej. 25)" value={data.paymentDay1} onChange={(e) => updateData({paymentDay1: e.target.value})} className="w-full rounded-xl mt-2 bg-card border border-border py-3 px-3" />
+                  )}
+                </>
+              )}
+
+              {data.incomeFrequency === "biweekly" && (
+                <>
+                  <label className="text-sm font-medium">¿Cuánto recibes en cada quincena?</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">1ra Q</span>
+                      <input type="number" value={data.incomePeriod1} onChange={(e) => updateData({incomePeriod1: e.target.value})} className="w-full rounded-xl bg-card border border-border py-3 pl-11 pr-2 outline-none" />
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">2da Q</span>
+                      <input type="number" value={data.incomePeriod2} onChange={(e) => updateData({incomePeriod2: e.target.value})} className="w-full rounded-xl bg-card border border-border py-3 pl-11 pr-2 outline-none" />
                     </div>
                   </div>
-                  <div className="relative w-24">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold text-sm">Q</span>
-                    <input 
-                      type="number"
-                      value={expense.amount}
-                      onChange={(e) => {
-                        const newExps = [...data.expenses];
-                        newExps[index].amount = e.target.value;
-                        updateData({ expenses: newExps });
-                      }}
-                      placeholder="0.00"
-                      className="w-full bg-background border border-border rounded-lg pl-6 pr-2 py-2 text-sm outline-none focus:border-primary"
-                    />
-                  </div>
-                  <button 
-                    onClick={() => {
-                      const newExps = [...data.expenses];
-                      newExps.splice(index, 1);
-                      updateData({ expenses: newExps });
-                    }}
-                    className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
+                  <p className="text-xs text-primary font-bold">Total proyectado: Q{(Number(data.incomePeriod1)||0) + (Number(data.incomePeriod2)||0)} / mes</p>
+                  
+                  <label className="text-sm font-medium mt-3 block">¿Fechas de tus quincenas?</label>
+                  <select value={data.paymentDayType} onChange={(e) => updateData({ paymentDayType: e.target.value })} className="w-full rounded-xl bg-card border border-border py-3 px-3">
+                    <option value="last_business_day_15_30">Días 15 y último hábil del mes</option>
+                    <option value="fixed_days">Días fijos manuales</option>
+                  </select>
+                  {data.paymentDayType === "fixed_days" && (
+                    <div className="flex gap-2 mt-2">
+                       <input type="number" placeholder="Día 1" value={data.paymentDay1} onChange={(e) => updateData({paymentDay1: e.target.value})} className="w-1/2 rounded-xl bg-card border py-2 px-3" />
+                       <input type="number" placeholder="Día 2" value={data.paymentDay2} onChange={(e) => updateData({paymentDay2: e.target.value})} className="w-1/2 rounded-xl bg-card border py-2 px-3" />
+                    </div>
+                  )}
+                </>
+              )}
 
-              <button
-                onClick={() => updateData({
-                  expenses: [
-                    ...data.expenses,
-                    { id: Date.now().toString(), categoryId: "otros", name: "", amount: "" }
-                  ]
-                })}
-                className="w-full flex items-center justify-center gap-2 py-4 border-2 border-dashed border-border rounded-2xl text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary transition-all"
-              >
-                <Plus className="h-4 w-4" /> Agregar otro gasto fijo
-              </button>
+              {data.incomeFrequency === "weekly" && (
+                <>
+                  <label className="text-sm font-medium">Pagos aproximados por semana (4 al mes)</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="number" placeholder="S1 (Q)" value={data.incomePeriod1} onChange={(e) => updateData({incomePeriod1: e.target.value})} className="w-full rounded-xl border p-3" />
+                    <input type="number" placeholder="S2 (Q)" value={data.incomePeriod2} onChange={(e) => updateData({incomePeriod2: e.target.value})} className="w-full rounded-xl border p-3" />
+                    <input type="number" placeholder="S3 (Q)" value={data.incomePeriod3} onChange={(e) => updateData({incomePeriod3: e.target.value})} className="w-full rounded-xl border p-3" />
+                    <input type="number" placeholder="S4 (Q)" value={data.incomePeriod4} onChange={(e) => updateData({incomePeriod4: e.target.value})} className="w-full rounded-xl border p-3" />
+                  </div>
+                  <p className="text-xs text-primary font-bold">Total proyectado: Q{getCalculatedMonthlyIncome()} / mes</p>
+                </>
+              )}
+
+              {data.incomeFrequency === "variable" && (
+                <>
+                  <label className="text-sm font-medium">Calculadora Emprendedor/Variable</label>
+                  <div className="space-y-2">
+                    <input type="number" placeholder="¿Cuánto ganas en tu MEJOR mes? (Q)" value={data.incomePeriod1} onChange={(e) => updateData({incomePeriod1: e.target.value})} className="w-full rounded-xl border p-3" />
+                    <input type="number" placeholder="¿Cuánto ganas en tu PEOR mes? (Q)" value={data.incomePeriod2} onChange={(e) => updateData({incomePeriod2: e.target.value})} className="w-full rounded-xl border p-3" />
+                  </div>
+                  <p className="text-xs text-primary font-bold">Base segura para Flowi: Q{getCalculatedMonthlyIncome()} / mes</p>
+                </>
+              )}
             </div>
 
-            <div className="fixed bottom-6 left-6 right-6 max-w-lg mx-auto flex flex-col gap-3">
-              <div className="flex gap-3">
-                <button
-                  onClick={prevStep}
-                  className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground transition-all hover:bg-muted/80"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={nextStep}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-4 font-semibold text-white shadow-[0_8px_30px_rgb(16,185,129,0.3)] transition-all hover:bg-primary/90"
-                >
-                  {data.expenses.length > 0 ? "Estos son mis fijos" : "No tengo fijos reales"} <ChevronRight className="h-5 w-5" />
-                </button>
+            <div className="bg-muted p-4 rounded-xl border border-border">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium">¿Este mes ganas diferente a la regla?</span>
+                <Switch checked={data.hasDifferentMonth} onCheckedChange={(val) => updateData({hasDifferentMonth: val})} />
               </div>
+              {data.hasDifferentMonth && (
+                <div>
+                   <input type="number" placeholder="Ingreso exacto real de ESTE mes (Q)" value={data.incomeThisMonth} onChange={(e) => updateData({incomeThisMonth: e.target.value})} className="w-full rounded-xl border p-3" />
+                   <p className="text-xs text-muted-foreground mt-1">Útil si tuviste descuento, bono catorce o aguinaldo temporalmente.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* STEP 4: Primera meta */}
-        {step === 4 && (
-          <div className="animate-slide-up space-y-6 pb-32">
-            <div className="text-left">
-              <h1 className="text-2xl font-bold text-foreground">
-                ¿Tienes algún sueño en mente? 🚀
-              </h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                No tiene que ser inmenso. Ponerle un nombre a tu ahorro cambia completamente cómo te sientes sobre guardar dinero.
-              </p>
-            </div>
+        {/* STEP 3 and 4 (Expenses and Goals, mostly unchanged visual wrapper but abbreviated logic to save space) */}
+        {step === 3 && (
+          <div className="animate-slide-up space-y-4">
+            <h1 className="text-2xl font-bold">¿Tienes Gastos Fijos? (Se descontarán auto)</h1>
+            {COMMON_EXPENSES.map((ce) => {
+              const isSelected = data.expenses.some(e => e.id === ce.id);
+              const expObj = data.expenses.find(e => e.id === ce.id);
+              return (
+                <div key={ce.id} className="rounded-2xl border p-3 flex flex-col gap-2 bg-card">
+                  <div className="flex justify-between items-center cursor-pointer" onClick={() => {
+                    if (isSelected) updateData({ expenses: data.expenses.filter(x => x.id !== ce.id) });
+                    else updateData({ expenses: [...data.expenses, { id: ce.id, categoryId: ce.cat, amount: "", name: ce.label }] });
+                  }}>
+                    <span className="font-medium text-sm">{ce.label}</span>
+                    <Switch checked={isSelected} />
+                  </div>
+                  {isSelected && (
+                    <input type="number" value={expObj?.amount || ""} onChange={(e) => {
+                      updateData({ expenses: data.expenses.map(x => x.id === ce.id ? { ...x, amount: e.target.value } : x) })
+                    }} placeholder="Monto (Q)" className="p-2 border rounded-xl outline-none" autoFocus />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
 
-            <div className="grid grid-cols-2 gap-3 pt-4">
-              {GOAL_TYPES.slice(0, 6).map((goal) => {
-                const Icon = goal.icon;
-                const isSelected = data.goalType === goal.id;
-                return (
-                  <button
-                    key={goal.id}
-                    onClick={() => updateData({ goalType: goal.id, goalName: data.goalName || goal.label })}
-                    className={`flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border transition-all ${
-                      isSelected ? "border-primary bg-primary/10 ring-2 ring-primary/20 text-primary" : "border-border bg-card text-muted-foreground hover:bg-muted/50"
-                    }`}
-                  >
-                    <Icon className="h-8 w-8" />
-                    <span className="text-xs font-semibold">{goal.label}</span>
-                  </button>
-                );
-              })}
+        {step === 4 && (
+          <div className="animate-slide-up space-y-5">
+            <h1 className="text-2xl font-bold">Tu Gran Sueño</h1>
+            <p className="text-xs text-muted-foreground">Flowi calculará cómo pagar esto (Puedes saltarlo)</p>
+            
+            <div className="grid grid-cols-3 gap-2">
+              {GOAL_TYPES.map(g => (
+                <button key={g.id} onClick={() => updateData({goalType: g.id})} className={`p-3 border rounded-xl flex flex-col items-center gap-1 text-xs ${data.goalType === g.id ? 'bg-primary text-white border-primary' : 'bg-card'}`}>
+                   <g.icon className="h-5 w-5" />
+                   {g.label}
+                </button>
+              ))}
             </div>
 
             {data.goalType && (
-              <div className="animate-scale-in bg-card border border-border p-4 rounded-2xl space-y-4 shadow-sm mt-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">¿Cómo se llama tu sueño?</label>
-                  <input
-                    type="text"
-                    value={data.goalName}
-                    onChange={(e) => updateData({ goalName: e.target.value })}
-                    placeholder="Escribelo aquí..."
-                    className="w-full rounded-xl bg-background border border-border py-3 px-4 text-sm text-foreground focus:border-primary outline-none"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">¿Cuánto calculas que cuesta?</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">Q</span>
-                    <input
-                      type="number"
-                      value={data.goalAmount}
-                      onChange={(e) => updateData({ goalAmount: e.target.value })}
-                      placeholder="15000"
-                      className="w-full rounded-xl bg-background border border-border py-3 pl-10 pr-4 text-sm text-foreground focus:border-primary outline-none"
-                    />
-                  </div>
-                </div>
+              <div className="space-y-3 mt-4">
+                <input placeholder="Nombre de tu sueño" value={data.goalName} onChange={e => updateData({goalName: e.target.value})} className="w-full p-3 border rounded-xl" />
+                <input type="number" placeholder="Monto Total (Q)" value={data.goalAmount} onChange={e => updateData({goalAmount: e.target.value})} className="w-full p-3 border rounded-xl" />
               </div>
             )}
-
-            <div className="fixed bottom-6 left-6 right-6 max-w-lg mx-auto flex flex-col gap-3 bg-background/80 backdrop-blur-md pt-4">
-              <div className="flex gap-3">
-                <button
-                  onClick={prevStep}
-                  disabled={loading}
-                  className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground transition-all hover:bg-muted/80 disabled:opacity-50"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={() => handleFinish(false)}
-                  disabled={!isStep4Valid || loading}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-4 font-semibold text-white shadow-[0_8px_30px_rgb(16,185,129,0.3)] transition-all hover:bg-primary/90 disabled:opacity-50 disabled:shadow-none"
-                >
-                  {loading ? "Preparando..." : "¡Crear mi sueño!"} <Target className="h-5 w-5" />
-                </button>
-              </div>
-              <button
-                onClick={() => handleFinish(true)}
-                disabled={loading}
-                className="text-sm font-semibold text-muted-foreground hover:text-primary transition-colors py-2"
-              >
-                Lo agrego después (Saltar)
-              </button>
+            
+            <div className="pt-8">
+              <button disabled={loading} onClick={() => handleFinish(true)} className="w-full text-muted-foreground font-semibold text-sm py-4">Saltar Meta / Hacerlo luego</button>
+              <button disabled={loading || !data.goalType || !data.goalName || !data.goalAmount} onClick={() => handleFinish(false)} className="w-full bg-primary text-white font-bold p-4 rounded-xl mt-2">Finalizar y Entrar ✨</button>
             </div>
           </div>
         )}
+
       </div>
+
+      {step < 4 && (
+        <div className="fixed bottom-6 left-6 right-6 max-w-lg mx-auto">
+          <button
+            onClick={nextStep}
+            disabled={step === 1 ? !isStep1Valid : step === 2 ? !isStep2Valid : false}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-4 text-base font-semibold text-white shadow-lg transition-all hover:bg-primary/90 disabled:opacity-50 disabled:shadow-none"
+           >
+            Continuar <ArrowRight className="h-5 w-5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

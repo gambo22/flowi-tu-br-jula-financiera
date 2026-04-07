@@ -1,19 +1,24 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, TrendingUp, Lightbulb } from "lucide-react";
+import { Plus, TrendingUp, Lightbulb, Landmark, CreditCard, Banknote } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { EXPENSE_CATEGORIES, INSIGHTS, formatQ } from "@/lib/constants";
 import AddExpenseModal from "@/components/AddExpenseModal";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { calculatePaymentDate, getPaymentDistanceText } from "@/lib/dateUtils";
 
 export default function Dashboard() {
   const [showAddExpense, setShowAddExpense] = useState(false);
   const { profile, user } = useAuth();
   const queryClient = useQueryClient();
 
-  const userName = profile?.name ?? "tú";
-  const monthlyIncome = profile?.monthly_income ?? 0;
+  const userName = profile?.name ?? "Tú";
+  const monthlyIncome = profile?.income_this_month !== null && profile?.income_this_month !== undefined 
+                           ? profile?.income_this_month 
+                           : profile?.monthly_income ?? 0;
+  
+  const rawCash = profile?.cash_on_hand || 0;
 
   // Real data fetching
   const { data: expenses = [] } = useQuery({
@@ -44,26 +49,48 @@ export default function Dashboard() {
     enabled: !!user?.id,
   });
 
+  const { data: accounts = [] } = useQuery({
+    queryKey: ["accounts", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("accounts")
+        .select("*")
+        .eq("user_id", user?.id);
+      // Suppress error if table isn't fully read early, though it should be assuming user ran SQL
+      if (error) {
+        if(error.code === '42703') return []; // Fallback silently for dev stages
+        throw error;
+      }
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
   // Derived calculations
   const today = new Date();
   const dayOfMonth = today.getDate();
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
   
-  // Solamente sumar los gastos del último mes actual para el layout principal
   const currentMonthExpenses = expenses.filter(e => {
     const expenseDate = new Date(e.date);
     return expenseDate.getMonth() === today.getMonth() && expenseDate.getFullYear() === today.getFullYear();
   });
 
   const totalSpent = currentMonthExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const goalsCommitted = goals.reduce((sum, g) => sum + (g.current_saved || 0), 0); // No ideal logic for committed monthly, using simple safe sum
-  const available = monthlyIncome > 0 ? (monthlyIncome - totalSpent) : 0;
+  
+  const accountsTotal = accounts.reduce((sum: number, acc: any) => sum + (Number(acc.balance) || 0), 0);
+
+  // Patrimonio total líquido (Accounts + Cash) (Without assuming future salary actually in hands)
+  // But user stated: "Cuentas registradas + Efectivo + lo que viene de nómina" for available money maybe? 
+  // Wait, let's keep it safe: Liquid = Cash + Banco.
+  const liquidWealth = rawCash + accountsTotal;
+  // Available budget this month = Total Liquid + Income - Spent.
+  const available = (monthlyIncome + liquidWealth) - totalSpent; 
 
   const budgetPercent = monthlyIncome > 0 ? Math.round((totalSpent / monthlyIncome) * 100) : 0;
   const timePercent = Math.round((dayOfMonth / daysInMonth) * 100);
 
   const insight = INSIGHTS[today.getDate() % INSIGHTS.length];
-
   const recentExpenses = expenses.slice(0, 3);
   const activeGoal = goals.length > 0 ? goals[0] : null;
 
@@ -74,16 +101,11 @@ export default function Dashboard() {
     day: "numeric",
   });
 
-  // Mutación para agregar gasto nuevo directamente
   const addExpenseMutation = useMutation({
     mutationFn: async (expense: any) => {
       const { data, error } = await supabase.from("expenses").insert({
         user_id: user?.id,
-        amount: expense.amount,
-        category: expense.category,
-        date: expense.date,
-        note: expense.note,
-        is_recurring: expense.is_recurring,
+        amount: expense.amount, category: expense.category, date: expense.date, note: expense.note, is_recurring: expense.is_recurring,
       });
       if (error) throw error;
       return data;
@@ -93,6 +115,35 @@ export default function Dashboard() {
     },
   });
 
+  // Payday Logic
+  let paymentText = "";
+  if (profile?.income_frequency === 'monthly') {
+     const pDate = calculatePaymentDate(profile?.payment_day_type || 'last_business_day', today, profile?.payment_day_1);
+     paymentText = getPaymentDistanceText(pDate);
+  } else if (profile?.income_frequency === 'biweekly') {
+     // Check which payday is next. If today is <= 15, then use 15. If > 15, then use end of month.
+     const rule = profile?.payment_day_type || 'last_business_day_15_30';
+     let target1; let target2;
+     if (rule === 'fixed_days') {
+        target1 = calculatePaymentDate('fixed_day', today, profile?.payment_day_1);
+        target2 = calculatePaymentDate('fixed_day', today, profile?.payment_day_2);
+     } else {
+        target1 = calculatePaymentDate('last_business_day_15', today);
+        target2 = calculatePaymentDate('last_business_day_of_month', today);
+     }
+
+     if (today.getTime() <= target1.getTime()) {
+         paymentText = getPaymentDistanceText(target1);
+     } else if (today.getTime() <= target2.getTime()) {
+         paymentText = getPaymentDistanceText(target2);
+     } else {
+         // Next month's 1st payment
+         const nextM = new Date(today.getFullYear(), today.getMonth()+1, 1);
+         const n1 = rule === 'fixed_days' ? calculatePaymentDate('fixed_day', nextM, profile?.payment_day_1) : calculatePaymentDate('last_business_day_15', nextM);
+         paymentText = getPaymentDistanceText(n1);
+     }
+  }
+
   return (
     <div className="animate-fade-in space-y-5 p-4 pb-24">
       {/* Header */}
@@ -101,19 +152,37 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-foreground">Hola, {userName} 👋</h1>
           <p className="text-sm capitalize text-muted-foreground">{dateStr}</p>
         </div>
-        <Link to="/perfil" className="h-12 w-12 flex items-center justify-center rounded-full bg-primary/10 text-primary transition-transform hover:scale-105 border border-primary/20 shadow-sm">
+        <Link to="/perfil" className="h-12 w-12 flex items-center justify-center rounded-full bg-primary/10 text-primary transition-transform hover:scale-105 border border-primary/20 shadow-sm relative">
            <span className="font-bold text-lg">{userName.charAt(0).toUpperCase()}</span>
+           {liquidWealth === 0 && <span className="absolute top-0 right-0 h-3 w-3 rounded-full bg-red-500 animate-pulse border-2 border-background"></span>}
         </Link>
       </div>
 
-      {/* Available money card */}
-      <div className={`rounded-2xl p-5 ${available >= 0 ? "bg-primary" : "bg-destructive"} text-primary-foreground`}>
-        <p className="mb-1 text-sm font-medium opacity-90">Tu dinero disponible restante</p>
-        <p className="text-3xl font-bold">{formatQ(available)}</p>
-        <div className="mt-3 flex items-center gap-2 text-xs opacity-80">
-          <span>Ingreso: {formatQ(monthlyIncome)}</span>
-          <span>•</span>
-          <span>Gastado: {formatQ(totalSpent)}</span>
+      {paymentText && (
+        <div className="bg-accent/15 text-accent font-semibold px-3 py-1.5 rounded-full text-xs flex items-center gap-2 border border-accent/20 w-fit">
+           <Landmark className="h-3.5 w-3.5" />
+           {paymentText}
+        </div>
+      )}
+
+      {/* Available money card (Patrimonio) */}
+      <div className={`rounded-3xl p-6 relative overflow-hidden ${available >= 0 ? "bg-primary" : "bg-destructive"} text-primary-foreground`}>
+        <div className="absolute right-[-10%] top-[-10%] opacity-10">
+           <Banknote className="h-32 w-32" />
+        </div>
+        <div className="relative z-10">
+          <p className="mb-1 text-sm font-medium opacity-90">Patrimonio Líquido Total</p>
+          <p className="text-3xl font-bold tracking-tight">{formatQ(available)}</p>
+          <div className="mt-4 flex bg-primary-foreground/10 rounded-xl p-3 items-center justify-between text-xs font-medium">
+            <div className="flex flex-col">
+               <span className="opacity-75">Bancos + Efectivo</span>
+               <span>{formatQ(liquidWealth)}</span>
+            </div>
+            <div className="flex flex-col text-right">
+               <span className="opacity-75">Ingreso Flujo</span>
+               <span>{formatQ(monthlyIncome)}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -131,13 +200,15 @@ export default function Dashboard() {
             style={{ width: `${Math.min(budgetPercent, 100)}%` }}
           />
         </div>
-        <p className="text-xs text-muted-foreground">
-          Has usado el <span className="font-semibold text-foreground">{budgetPercent}%</span> de tu presupuesto
-          {budgetPercent > timePercent && " — vas un poco por encima del ritmo ideal"}
-        </p>
+        <div className="flex justify-between items-center mt-1">
+           <p className="text-xs text-muted-foreground">
+             Gastado: <span className="font-semibold text-foreground">{formatQ(totalSpent)}</span>
+           </p>
+           <p className="text-xs font-bold">{budgetPercent}%</p>
+        </div>
       </div>
 
-      {/* Recent expenses o Empty State */}
+      {/* Recent expenses */}
       <div className="rounded-2xl bg-card p-4 shadow-sm border border-border">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-foreground">Últimos gastos</h3>
@@ -171,34 +242,6 @@ export default function Dashboard() {
                 </div>
               );
             })}
-          </div>
-        )}
-      </div>
-
-      {/* Active goal o Empty State */}
-      <div className="rounded-2xl bg-card p-4 shadow-sm border border-border">
-        <div className="mb-2 flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-accent" />
-          <h3 className="text-sm font-semibold text-foreground">Tu gran Meta</h3>
-        </div>
-        {activeGoal ? (
-          <>
-            <p className="mb-1 font-medium text-foreground">{activeGoal.name}</p>
-            <div className="mb-1 h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-accent"
-                style={{
-                  width: `${Math.min(Math.round(((activeGoal.current_saved || 0) / (activeGoal.total_amount || 1)) * 100), 100)}%`,
-                }}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {formatQ(activeGoal.current_saved || 0)} de {formatQ(activeGoal.total_amount || 0)}
-            </p>
-          </>
-        ) : (
-          <div className="py-2 text-left">
-            <p className="text-xs text-muted-foreground">Darle un propósito a tus ahorros cambia tu forma de verlo. Agrega tu primer sueño en la pestaña respectiva.</p>
           </div>
         )}
       </div>

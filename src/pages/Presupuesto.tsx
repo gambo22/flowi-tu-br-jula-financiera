@@ -360,7 +360,7 @@ function AddCategoryLimitModal({ configuredCats, onClose, onSave }: { configured
               <SelectTrigger>
                 <SelectValue placeholder="Selecciona una cateogría" />
               </SelectTrigger>
-              <SelectContent className="max-h-[300px]">
+              <SelectContent className="max-h-[300px] z-[70]">
                 {availableCats.map((cat) => (
                   <SelectItem key={cat.id} value={cat.id}>
                     {cat.label}
