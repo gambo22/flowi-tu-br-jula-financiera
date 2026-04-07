@@ -33,7 +33,6 @@ export default function Auth() {
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -60,11 +59,6 @@ export default function Auth() {
         }
       } else {
         // Register
-        if (!name.trim()) {
-          setError("¿Cómo te llamas? Necesitamos tu nombre para personalizar Flowi. 🙂");
-          setLoading(false);
-          return;
-        }
         const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
         if (signUpError) {
           setError(getErrorMessage(signUpError.code));
@@ -72,7 +66,6 @@ export default function Auth() {
           // Create profile row in users table
           await supabase.from("users").upsert({
             id: data.user.id,
-            name: name.trim(),
             email: email,
             onboarding_complete: false,
           });
@@ -160,27 +153,6 @@ export default function Auth() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Name field — only for register */}
-          {mode === "register" && (
-            <div className="animate-fade-in">
-              <label
-                htmlFor="auth-name"
-                className="mb-1.5 block text-sm font-medium text-foreground"
-              >
-                ¿Cómo te llamas?
-              </label>
-              <input
-                id="auth-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Tu nombre"
-                autoComplete="name"
-                className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-              />
-            </div>
-          )}
-
           {/* Email */}
           <div>
             <label
