@@ -101,6 +101,11 @@ export default function Onboarding() {
       const { error: userError } = await supabase.from("users").upsert({
         id: user.id,
         name: data.name,
+        // Legacy fallbacks needed to prevent NOT NULL constraints crashing insertions:
+        income_type: data.incomeFrequency === "variable" ? "variable" : "fixed",
+        income_min: 0,
+        income_max: 0,
+        // New columns
         income_frequency: data.incomeFrequency,
         income_period_1: p1,
         income_period_2: p2,
@@ -126,12 +131,14 @@ export default function Onboarding() {
           date: new Date().toISOString(),
           is_recurring: true,
         }));
-        await supabase.from("expenses").insert(expensesToInsert);
+        
+        const { error: expError } = await supabase.from("expenses").insert(expensesToInsert);
+        if (expError) throw expError;
       }
 
       // Meta
       if (!skipGoal && data.goalType && data.goalName && data.goalAmount) {
-        await supabase.from("goals").insert({
+        const { error: goalError } = await supabase.from("goals").insert({
           user_id: user.id,
           name: data.goalName,
           type: data.goalType,
@@ -139,13 +146,15 @@ export default function Onboarding() {
           current_saved: 0,
           priority: 1,
         });
+        if (goalError) throw goalError;
       }
 
       await refreshProfile();
       navigate("/", { replace: true });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error saving onboarding state:", err);
-      alert("Hubo un error al guardar tu configuración. Por favor intenta de nuevo.");
+      let errorMsg = err.message || JSON.stringify(err);
+      alert(`Hubo un error al guardar tu configuración:\n\n${errorMsg}\n\nPor favor intenta de nuevo.`);
       setLoading(false);
     }
   };
@@ -181,7 +190,7 @@ export default function Onboarding() {
               value={data.name}
               onChange={(e) => updateData({ name: e.target.value })}
               placeholder="Ej. María"
-              className="w-full rounded-2xl border border-border bg-card px-5 py-4 text-base focus:border-primary outline-none"
+              className="w-full rounded-2xl border border-border bg-card px-5 py-4 text-base text-foreground focus:border-primary outline-none"
               autoFocus
             />
           </div>
@@ -208,46 +217,46 @@ export default function Onboarding() {
             <div className="space-y-4 bg-muted/30 p-4 rounded-xl border border-border">
               {data.incomeFrequency === "monthly" && (
                 <>
-                  <label className="text-sm font-medium">¿Cuánto recibes al mes?</label>
+                  <label className="text-sm font-medium text-foreground">¿Cuánto recibes al mes?</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">Q</span>
-                    <input type="number" value={data.incomePeriod1} onChange={(e) => updateData({incomePeriod1: e.target.value})} className="w-full rounded-xl bg-card border border-border py-3 pl-8 pr-4 outline-none focus:border-primary" />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-foreground">Q</span>
+                    <input type="number" value={data.incomePeriod1} onChange={(e) => updateData({incomePeriod1: e.target.value})} className="w-full rounded-xl bg-card border border-border py-3 pl-8 pr-4 text-foreground outline-none focus:border-primary" />
                   </div>
-                  <label className="text-sm font-medium mt-3 block">¿Cuándo te pagan?</label>
-                  <select value={data.paymentDayType} onChange={(e) => updateData({ paymentDayType: e.target.value })} className="w-full rounded-xl bg-card border border-border py-3 px-3">
+                  <label className="text-sm font-medium mt-3 block text-foreground">¿Cuándo te pagan?</label>
+                  <select value={data.paymentDayType} onChange={(e) => updateData({ paymentDayType: e.target.value })} className="w-full rounded-xl bg-card border border-border py-3 px-3 text-foreground">
                     <option value="last_business_day">Último día hábil del mes</option>
                     <option value="fixed_day">Un día fijo específico</option>
                   </select>
                   {data.paymentDayType === "fixed_day" && (
-                    <input type="number" placeholder="Día (ej. 25)" value={data.paymentDay1} onChange={(e) => updateData({paymentDay1: e.target.value})} className="w-full rounded-xl mt-2 bg-card border border-border py-3 px-3" />
+                    <input type="number" placeholder="Día (ej. 25)" value={data.paymentDay1} onChange={(e) => updateData({paymentDay1: e.target.value})} className="w-full rounded-xl mt-2 bg-card border border-border py-3 px-3 text-foreground" />
                   )}
                 </>
               )}
 
               {data.incomeFrequency === "biweekly" && (
                 <>
-                  <label className="text-sm font-medium">¿Cuánto recibes en cada quincena?</label>
+                  <label className="text-sm font-medium text-foreground">¿Cuánto recibes en cada quincena?</label>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">1ra Q</span>
-                      <input type="number" value={data.incomePeriod1} onChange={(e) => updateData({incomePeriod1: e.target.value})} className="w-full rounded-xl bg-card border border-border py-3 pl-11 pr-2 outline-none" />
+                      <input type="number" value={data.incomePeriod1} onChange={(e) => updateData({incomePeriod1: e.target.value})} className="w-full rounded-xl bg-card border border-border py-3 pl-11 pr-2 text-foreground outline-none" />
                     </div>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">2da Q</span>
-                      <input type="number" value={data.incomePeriod2} onChange={(e) => updateData({incomePeriod2: e.target.value})} className="w-full rounded-xl bg-card border border-border py-3 pl-11 pr-2 outline-none" />
+                      <input type="number" value={data.incomePeriod2} onChange={(e) => updateData({incomePeriod2: e.target.value})} className="w-full rounded-xl bg-card border border-border py-3 pl-11 pr-2 text-foreground outline-none" />
                     </div>
                   </div>
                   <p className="text-xs text-primary font-bold">Total proyectado: Q{(Number(data.incomePeriod1)||0) + (Number(data.incomePeriod2)||0)} / mes</p>
                   
-                  <label className="text-sm font-medium mt-3 block">¿Fechas de tus quincenas?</label>
-                  <select value={data.paymentDayType} onChange={(e) => updateData({ paymentDayType: e.target.value })} className="w-full rounded-xl bg-card border border-border py-3 px-3">
+                  <label className="text-sm font-medium mt-3 block text-foreground">¿Fechas de tus quincenas?</label>
+                  <select value={data.paymentDayType} onChange={(e) => updateData({ paymentDayType: e.target.value })} className="w-full rounded-xl bg-card border border-border py-3 px-3 text-foreground">
                     <option value="last_business_day_15_30">Días 15 y último hábil del mes</option>
                     <option value="fixed_days">Días fijos manuales</option>
                   </select>
                   {data.paymentDayType === "fixed_days" && (
                     <div className="flex gap-2 mt-2">
-                       <input type="number" placeholder="Día 1" value={data.paymentDay1} onChange={(e) => updateData({paymentDay1: e.target.value})} className="w-1/2 rounded-xl bg-card border py-2 px-3" />
-                       <input type="number" placeholder="Día 2" value={data.paymentDay2} onChange={(e) => updateData({paymentDay2: e.target.value})} className="w-1/2 rounded-xl bg-card border py-2 px-3" />
+                       <input type="number" placeholder="Día 1" value={data.paymentDay1} onChange={(e) => updateData({paymentDay1: e.target.value})} className="w-1/2 rounded-xl bg-card border py-2 px-3 text-foreground" />
+                       <input type="number" placeholder="Día 2" value={data.paymentDay2} onChange={(e) => updateData({paymentDay2: e.target.value})} className="w-1/2 rounded-xl bg-card border py-2 px-3 text-foreground" />
                     </div>
                   )}
                 </>
@@ -255,12 +264,12 @@ export default function Onboarding() {
 
               {data.incomeFrequency === "weekly" && (
                 <>
-                  <label className="text-sm font-medium">Pagos aproximados por semana (4 al mes)</label>
+                  <label className="text-sm font-medium text-foreground">Pagos aproximados por semana (4 al mes)</label>
                   <div className="grid grid-cols-2 gap-3">
-                    <input type="number" placeholder="S1 (Q)" value={data.incomePeriod1} onChange={(e) => updateData({incomePeriod1: e.target.value})} className="w-full rounded-xl border p-3" />
-                    <input type="number" placeholder="S2 (Q)" value={data.incomePeriod2} onChange={(e) => updateData({incomePeriod2: e.target.value})} className="w-full rounded-xl border p-3" />
-                    <input type="number" placeholder="S3 (Q)" value={data.incomePeriod3} onChange={(e) => updateData({incomePeriod3: e.target.value})} className="w-full rounded-xl border p-3" />
-                    <input type="number" placeholder="S4 (Q)" value={data.incomePeriod4} onChange={(e) => updateData({incomePeriod4: e.target.value})} className="w-full rounded-xl border p-3" />
+                    <input type="number" placeholder="S1 (Q)" value={data.incomePeriod1} onChange={(e) => updateData({incomePeriod1: e.target.value})} className="w-full bg-card rounded-xl border p-3 text-foreground" />
+                    <input type="number" placeholder="S2 (Q)" value={data.incomePeriod2} onChange={(e) => updateData({incomePeriod2: e.target.value})} className="w-full bg-card rounded-xl border p-3 text-foreground" />
+                    <input type="number" placeholder="S3 (Q)" value={data.incomePeriod3} onChange={(e) => updateData({incomePeriod3: e.target.value})} className="w-full bg-card rounded-xl border p-3 text-foreground" />
+                    <input type="number" placeholder="S4 (Q)" value={data.incomePeriod4} onChange={(e) => updateData({incomePeriod4: e.target.value})} className="w-full bg-card rounded-xl border p-3 text-foreground" />
                   </div>
                   <p className="text-xs text-primary font-bold">Total proyectado: Q{getCalculatedMonthlyIncome()} / mes</p>
                 </>
@@ -268,10 +277,10 @@ export default function Onboarding() {
 
               {data.incomeFrequency === "variable" && (
                 <>
-                  <label className="text-sm font-medium">Calculadora Emprendedor/Variable</label>
+                  <label className="text-sm font-medium text-foreground">Calculadora Emprendedor/Variable</label>
                   <div className="space-y-2">
-                    <input type="number" placeholder="¿Cuánto ganas en tu MEJOR mes? (Q)" value={data.incomePeriod1} onChange={(e) => updateData({incomePeriod1: e.target.value})} className="w-full rounded-xl border p-3" />
-                    <input type="number" placeholder="¿Cuánto ganas en tu PEOR mes? (Q)" value={data.incomePeriod2} onChange={(e) => updateData({incomePeriod2: e.target.value})} className="w-full rounded-xl border p-3" />
+                    <input type="number" placeholder="¿Cuánto ganas en tu MEJOR mes? (Q)" value={data.incomePeriod1} onChange={(e) => updateData({incomePeriod1: e.target.value})} className="w-full bg-card rounded-xl border p-3 text-foreground" />
+                    <input type="number" placeholder="¿Cuánto ganas en tu PEOR mes? (Q)" value={data.incomePeriod2} onChange={(e) => updateData({incomePeriod2: e.target.value})} className="w-full bg-card rounded-xl border p-3 text-foreground" />
                   </div>
                   <p className="text-xs text-primary font-bold">Base segura para Flowi: Q{getCalculatedMonthlyIncome()} / mes</p>
                 </>
@@ -280,12 +289,12 @@ export default function Onboarding() {
 
             <div className="bg-muted p-4 rounded-xl border border-border">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium">¿Este mes ganas diferente a la regla?</span>
+                <span className="text-sm font-medium text-foreground">¿Este mes ganas diferente a la regla?</span>
                 <Switch checked={data.hasDifferentMonth} onCheckedChange={(val) => updateData({hasDifferentMonth: val})} />
               </div>
               {data.hasDifferentMonth && (
                 <div>
-                   <input type="number" placeholder="Ingreso exacto real de ESTE mes (Q)" value={data.incomeThisMonth} onChange={(e) => updateData({incomeThisMonth: e.target.value})} className="w-full rounded-xl border p-3" />
+                   <input type="number" placeholder="Ingreso exacto real de ESTE mes (Q)" value={data.incomeThisMonth} onChange={(e) => updateData({incomeThisMonth: e.target.value})} className="w-full bg-card text-foreground rounded-xl border p-3" />
                    <p className="text-xs text-muted-foreground mt-1">Útil si tuviste descuento, bono catorce o aguinaldo temporalmente.</p>
                 </div>
               )}
@@ -296,23 +305,23 @@ export default function Onboarding() {
         {/* STEP 3 and 4 (Expenses and Goals, mostly unchanged visual wrapper but abbreviated logic to save space) */}
         {step === 3 && (
           <div className="animate-slide-up space-y-4">
-            <h1 className="text-2xl font-bold">¿Tienes Gastos Fijos? (Se descontarán auto)</h1>
+            <h1 className="text-2xl font-bold text-foreground">¿Tienes Gastos Fijos? (Se descontarán auto)</h1>
             {COMMON_EXPENSES.map((ce) => {
               const isSelected = data.expenses.some(e => e.id === ce.id);
               const expObj = data.expenses.find(e => e.id === ce.id);
               return (
-                <div key={ce.id} className="rounded-2xl border p-3 flex flex-col gap-2 bg-card">
+                <div key={ce.id} className="rounded-2xl border p-3 flex flex-col gap-2 bg-card text-foreground">
                   <div className="flex justify-between items-center cursor-pointer" onClick={() => {
                     if (isSelected) updateData({ expenses: data.expenses.filter(x => x.id !== ce.id) });
                     else updateData({ expenses: [...data.expenses, { id: ce.id, categoryId: ce.cat, amount: "", name: ce.label }] });
                   }}>
-                    <span className="font-medium text-sm">{ce.label}</span>
+                    <span className="font-medium text-sm text-foreground">{ce.label}</span>
                     <Switch checked={isSelected} />
                   </div>
                   {isSelected && (
                     <input type="number" value={expObj?.amount || ""} onChange={(e) => {
                       updateData({ expenses: data.expenses.map(x => x.id === ce.id ? { ...x, amount: e.target.value } : x) })
-                    }} placeholder="Monto (Q)" className="p-2 border rounded-xl outline-none" autoFocus />
+                    }} placeholder="Monto (Q)" className="p-2 border rounded-xl outline-none bg-background text-foreground" autoFocus />
                   )}
                 </div>
               )
@@ -321,7 +330,7 @@ export default function Onboarding() {
         )}
 
         {step === 4 && (
-          <div className="animate-slide-up space-y-5">
+          <div className="animate-slide-up space-y-5 text-foreground">
             <h1 className="text-2xl font-bold">Tu Gran Sueño</h1>
             <p className="text-xs text-muted-foreground">Flowi calculará cómo pagar esto (Puedes saltarlo)</p>
             
@@ -336,8 +345,8 @@ export default function Onboarding() {
 
             {data.goalType && (
               <div className="space-y-3 mt-4">
-                <input placeholder="Nombre de tu sueño" value={data.goalName} onChange={e => updateData({goalName: e.target.value})} className="w-full p-3 border rounded-xl" />
-                <input type="number" placeholder="Monto Total (Q)" value={data.goalAmount} onChange={e => updateData({goalAmount: e.target.value})} className="w-full p-3 border rounded-xl" />
+                <input placeholder="Nombre de tu sueño" value={data.goalName} onChange={e => updateData({goalName: e.target.value})} className="w-full p-3 border rounded-xl bg-card text-foreground" />
+                <input type="number" placeholder="Monto Total (Q)" value={data.goalAmount} onChange={e => updateData({goalAmount: e.target.value})} className="w-full p-3 border rounded-xl bg-card text-foreground" />
               </div>
             )}
             
