@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Gastos from "./pages/Gastos";
 import Presupuesto from "./pages/Presupuesto";
 import Suenos from "./pages/Suenos";
+import Deudas from "./pages/Deudas";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Onboarding from "./pages/Onboarding";
