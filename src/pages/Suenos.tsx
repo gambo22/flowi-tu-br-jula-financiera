@@ -63,10 +63,7 @@ export default function Suenos() {
         name: goal.name,
         type: goal.type,
         total_amount: goal.total_amount,
-        down_payment: goal.down_payment,
-        monthly_payment: goal.monthly_payment,
         priority: goals.length + 1,
-        saved_amount: 0,
         current_saved: 0,
       });
       if (error) throw error;

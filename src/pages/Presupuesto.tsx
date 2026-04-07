@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { EXPENSE_CATEGORIES, formatQ } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { Edit2, X, Plus, AlertCircle, Settings } from "lucide-react";
+import { Edit2, X, Plus, AlertCircle, Settings, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -87,6 +87,17 @@ export default function Presupuesto() {
       toast.success("Límite guardado correctamente.");
       setEditingCat(null);
       setAddingLimit(false);
+    },
+  });
+
+  const deleteLimitMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("budget_limits").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["budgetLimits", user?.id] });
+      toast.success("Límite eliminado correctamente.");
     },
   });
 
@@ -199,6 +210,19 @@ export default function Presupuesto() {
                       {formatQ(spent)} de {monthlyLimit > 0 ? formatQ(monthlyLimit) : "Ilimitado / Sin tope"}
                     </p>
                   </div>
+                  {limitRow?.id && (
+                     <button
+                        onClick={(e) => {
+                           e.stopPropagation();
+                           if (window.confirm(`¿Eliminar límite de ${cat.label}?`)) {
+                              deleteLimitMutation.mutate(limitRow.id);
+                           }
+                        }}
+                        className="p-2 mr-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors"
+                     >
+                        <Trash2 className="h-4 w-4" />
+                     </button>
+                  )}
                   {monthlyLimit > 0 && (
                     <span className={cn("text-sm font-bold", pct > 90 ? "text-destructive" : pct > 70 ? "text-warning" : "text-primary")}>
                       {pct}%
