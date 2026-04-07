@@ -1,24 +1,29 @@
 import { useMemo, useState } from "react";
-import { Plus, TrendingUp, Lightbulb, ArrowRight } from "lucide-react";
-import { demoUser, demoExpenses, demoGoals } from "@/lib/demo-data";
+import { Plus, TrendingUp, Lightbulb } from "lucide-react";
+import { demoExpenses, demoGoals } from "@/lib/demo-data";
 import { EXPENSE_CATEGORIES, INSIGHTS, formatQ } from "@/lib/constants";
 import AddExpenseModal from "@/components/AddExpenseModal";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Dashboard() {
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [expenses, setExpenses] = useState(demoExpenses);
 
-  const user = demoUser;
+  const { profile } = useAuth();
   const goals = demoGoals;
+
+  // Use real profile data when available, fall back to demo values
+  const userName = profile?.name ?? "tú";
+  const monthlyIncome = profile?.monthly_income ?? 12000;
 
   const totalSpent = useMemo(() => expenses.reduce((s, e) => s + e.amount, 0), [expenses]);
   const goalsCommitted = useMemo(() => goals.reduce((s, g) => s + (g.monthly_payment || 0), 0), [goals]);
-  const available = user.monthly_income - totalSpent - goalsCommitted;
+  const available = monthlyIncome - totalSpent - goalsCommitted;
 
   const today = new Date();
   const dayOfMonth = today.getDate();
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-  const budgetPercent = Math.round((totalSpent / user.monthly_income) * 100);
+  const budgetPercent = Math.round((totalSpent / monthlyIncome) * 100);
   const timePercent = Math.round((dayOfMonth / daysInMonth) * 100);
 
   const insight = INSIGHTS[today.getDate() % INSIGHTS.length];
@@ -40,7 +45,7 @@ export default function Dashboard() {
     <div className="animate-fade-in space-y-5 p-4 pb-24">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Hola, {user.name} 👋</h1>
+        <h1 className="text-2xl font-bold text-foreground">Hola, {userName} 👋</h1>
         <p className="text-sm capitalize text-muted-foreground">{dateStr}</p>
       </div>
 
@@ -49,7 +54,7 @@ export default function Dashboard() {
         <p className="mb-1 text-sm font-medium opacity-90">Tu dinero disponible hoy</p>
         <p className="text-3xl font-bold">{formatQ(available)}</p>
         <div className="mt-3 flex items-center gap-2 text-xs opacity-80">
-          <span>Ingreso: {formatQ(user.monthly_income)}</span>
+          <span>Ingreso: {formatQ(monthlyIncome)}</span>
           <span>•</span>
           <span>Gastado: {formatQ(totalSpent)}</span>
         </div>

@@ -1,66 +1,282 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/context/AuthContext";
+
+// ─── Types ────────────────────────────────────────────────────────────
+
+type Mode = "login" | "register";
+
+// ─── Helpers ──────────────────────────────────────────────────────────
+
+function getErrorMessage(code: string | undefined): string {
+  switch (code) {
+    case "invalid_credentials":
+      return "El email o la contraseña no son correctos. ¿Lo intentamos de nuevo? 🙂";
+    case "email_not_confirmed":
+      return "Tu email aún no está confirmado. Revisa tu bandeja de entrada.";
+    case "user_already_exists":
+    case "23505":
+      return "Ya existe una cuenta con ese email. ¿Quieres iniciar sesión?";
+    case "weak_password":
+      return "La contraseña debe tener al menos 6 caracteres.";
+    case "over_email_send_rate_limit":
+      return "Demasiados intentos. Espera un momento antes de volver a intentarlo.";
+    default:
+      return "Algo salió mal. Intenta de nuevo en un momento.";
+  }
+}
+
+// ─── Component ────────────────────────────────────────────────────────
 
 export default function Auth() {
-  const [isLogin, setIsLogin] = useState(true);
+  const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [income, setIncome] = useState("");
-  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const { refreshProfile } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: Location })?.from?.pathname || "/";
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Demo: skip to dashboard
-    navigate("/");
+    setError(null);
+    setSuccessMsg(null);
+    setLoading(true);
+
+    try {
+      if (mode === "login") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          setError(getErrorMessage(error.code));
+        } else {
+          await refreshProfile();
+          navigate(from, { replace: true });
+        }
+      } else {
+        // Register
+        if (!name.trim()) {
+          setError("¿Cómo te llamas? Necesitamos tu nombre para personalizar Flowi. 🙂");
+          setLoading(false);
+          return;
+        }
+        const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+        if (signUpError) {
+          setError(getErrorMessage(signUpError.code));
+        } else if (data.user) {
+          // Create profile row in users table
+          await supabase.from("users").upsert({
+            id: data.user.id,
+            name: name.trim(),
+            email: email,
+            onboarding_complete: false,
+          });
+
+          if (data.session) {
+            // Email confirmation disabled — user is logged in right away
+            await refreshProfile();
+            navigate("/onboarding", { replace: true });
+          } else {
+            // Email confirmation enabled — show message
+            setSuccessMsg(
+              "¡Cuenta creada! 🎉 Revisa tu email para confirmar tu cuenta y volver a ingresar."
+            );
+          }
+        }
+      }
+    } catch {
+      setError("Algo salió mal. Intenta de nuevo en un momento.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const switchMode = () => {
+    setMode((m) => (m === "login" ? "register" : "login"));
+    setError(null);
+    setSuccessMsg(null);
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6">
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background px-6">
+
+      {/* Background gradient blobs */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-32 -left-32 h-80 w-80 rounded-full opacity-20"
+        style={{ background: "radial-gradient(circle, #10B981 0%, transparent 70%)" }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-32 -right-24 h-80 w-80 rounded-full opacity-15"
+        style={{ background: "radial-gradient(circle, #7C3AED 0%, transparent 70%)" }}
+      />
+
+      {/* Logo */}
       <div className="mb-8 text-center">
-        <h1 className="text-4xl font-extrabold text-primary">Flowi</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Tu compañero de libertad financiera 🇬🇹</p>
+        <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/30">
+          <span className="text-3xl font-black text-white">F</span>
+        </div>
+        <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Flowi</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Tu compañero de libertad financiera 🇬🇹
+        </p>
       </div>
 
-      <div className="w-full max-w-sm">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
-            <>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-muted-foreground">Nombre</label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre" />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-muted-foreground">Ingreso mensual (Q)</label>
-                <Input type="number" value={income} onChange={(e) => setIncome(e.target.value)} placeholder="Ej: 12000" />
-              </div>
-            </>
-          )}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-muted-foreground">Email</label>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@email.com" />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-muted-foreground">Contraseña</label>
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
-          </div>
+      {/* Card */}
+      <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-xl">
 
-          <Button type="submit" className="w-full" size="lg">
-            {isLogin ? "Iniciar sesión" : "Crear cuenta"}
-          </Button>
-        </form>
-
-        <div className="mt-4 text-center">
+        {/* Mode tabs */}
+        <div className="mb-6 flex rounded-xl bg-muted p-1">
           <button
-            onClick={() => setIsLogin(!isLogin)}
-            className="text-sm text-muted-foreground hover:text-primary"
+            id="tab-login"
+            type="button"
+            onClick={() => mode !== "login" && switchMode()}
+            className={`flex-1 rounded-lg py-2 text-sm font-medium transition-all ${
+              mode === "login"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
           >
-            {isLogin ? "¿No tienes cuenta? Regístrate" : "¿Ya tienes cuenta? Inicia sesión"}
+            Iniciar sesión
+          </button>
+          <button
+            id="tab-register"
+            type="button"
+            onClick={() => mode !== "register" && switchMode()}
+            className={`flex-1 rounded-lg py-2 text-sm font-medium transition-all ${
+              mode === "register"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Crear cuenta
           </button>
         </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Name field — only for register */}
+          {mode === "register" && (
+            <div className="animate-fade-in">
+              <label
+                htmlFor="auth-name"
+                className="mb-1.5 block text-sm font-medium text-foreground"
+              >
+                ¿Cómo te llamas?
+              </label>
+              <input
+                id="auth-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Tu nombre"
+                autoComplete="name"
+                className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              />
+            </div>
+          )}
+
+          {/* Email */}
+          <div>
+            <label
+              htmlFor="auth-email"
+              className="mb-1.5 block text-sm font-medium text-foreground"
+            >
+              Email
+            </label>
+            <input
+              id="auth-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tu@email.com"
+              autoComplete="email"
+              required
+              className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+            />
+          </div>
+
+          {/* Password */}
+          <div>
+            <label
+              htmlFor="auth-password"
+              className="mb-1.5 block text-sm font-medium text-foreground"
+            >
+              Contraseña
+            </label>
+            <input
+              id="auth-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              required
+              minLength={6}
+              className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+            />
+            {mode === "register" && (
+              <p className="mt-1 text-xs text-muted-foreground">Mínimo 6 caracteres</p>
+            )}
+          </div>
+
+          {/* Error message */}
+          {error && (
+            <div className="animate-fade-in rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3">
+              <p className="text-sm text-destructive">{error}</p>
+            </div>
+          )}
+
+          {/* Success message */}
+          {successMsg && (
+            <div className="animate-fade-in rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
+              <p className="text-sm text-primary">{successMsg}</p>
+            </div>
+          )}
+
+          {/* Submit button */}
+          <button
+            id="auth-submit"
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/30 transition-all hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/40 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                {mode === "login" ? "Entrando..." : "Creando cuenta..."}
+              </span>
+            ) : mode === "login" ? (
+              "Entrar a Flowi"
+            ) : (
+              "Crear mi cuenta"
+            )}
+          </button>
+        </form>
+
+        {/* Footer link */}
+        <p className="mt-5 text-center text-sm text-muted-foreground">
+          {mode === "login" ? "¿No tienes cuenta?" : "¿Ya tienes cuenta?"}{" "}
+          <button
+            id="auth-switch-mode"
+            type="button"
+            onClick={switchMode}
+            className="font-medium text-primary hover:underline"
+          >
+            {mode === "login" ? "Regístrate gratis" : "Inicia sesión"}
+          </button>
+        </p>
       </div>
+
+      {/* Tagline footer */}
+      <p className="mt-6 text-center text-xs text-muted-foreground">
+        Flowi no te juzga. Te acompaña. 💚
+      </p>
     </div>
   );
 }
