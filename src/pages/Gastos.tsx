@@ -13,6 +13,7 @@ export default function Gastos() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<any>(null); // State for the expense being edited
 
   const { data: expenses = [] } = useQuery({
     queryKey: ["expenses", user?.id],
@@ -39,22 +40,38 @@ export default function Gastos() {
     },
   });
 
-  const addExpenseMutation = useMutation({
+  const upsertExpenseMutation = useMutation({
     mutationFn: async (expense: any) => {
-      const { data, error } = await supabase.from("expenses").insert({
-        user_id: user?.id,
-        amount: expense.amount,
-        category: expense.category,
-        date: expense.date,
-        note: expense.note,
-        is_recurring: expense.is_recurring,
-      });
-      if (error) throw error;
-      return data;
+      if (expense.id) {
+        // Edit existing
+        const { data, error } = await supabase.from("expenses").update({
+          amount: expense.amount,
+          category: expense.category,
+          date: expense.date,
+          note: expense.note,
+          is_recurring: expense.is_recurring,
+        }).eq("id", expense.id);
+        if (error) throw error;
+        return data;
+      } else {
+        // Insert new
+        const { data, error } = await supabase.from("expenses").insert({
+          user_id: user?.id,
+          amount: expense.amount,
+          category: expense.category,
+          date: expense.date,
+          note: expense.note,
+          is_recurring: expense.is_recurring,
+        });
+        if (error) throw error;
+        return data;
+      }
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["expenses", user?.id] });
-      toast.success("¡Gasto registrado con éxito!");
+      setEditingExpense(null);
+      if (variables.id) toast.success("Gasto actualizado.");
+      else toast.success("¡Gasto registrado con éxito!");
     },
   });
 
@@ -112,6 +129,8 @@ export default function Gastos() {
         ))}
       </div>
 
+      <p className="text-xs italic text-muted-foreground mb-3 font-medium">Pulsa sobre cualquier gasto para editar los detalles</p>
+
       {/* Expense list grouped by day */}
       <div className="space-y-5">
         {grouped.map(([day, items]) => (
@@ -122,18 +141,24 @@ export default function Gastos() {
                 const cat = EXPENSE_CATEGORIES.find((c) => c.id === exp.category);
                 const Icon = cat?.icon;
                 return (
-                  <div key={exp.id} className="flex items-center gap-3 rounded-xl bg-card p-3 border border-border">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
-                      {Icon && <Icon className="h-5 w-5 text-muted-foreground" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{exp.note || cat?.label}</p>
-                      <p className="text-xs text-muted-foreground">{cat?.label}{exp.is_recurring ? " • Fijo" : ""}</p>
-                    </div>
-                    <span className="text-sm font-semibold text-foreground">{formatQ(exp.amount || 0)}</span>
+                  <div key={exp.id} className="group relative">
+                    <button 
+                      onClick={() => setEditingExpense(exp)}
+                      className="w-full text-left flex items-center gap-3 rounded-xl bg-card p-3 border border-border hover:border-primary/50 transition-colors active:scale-[0.99]"
+                    >
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+                        {Icon && <Icon className="h-5 w-5 text-muted-foreground" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{exp.note || cat?.label}</p>
+                        <p className="text-xs text-muted-foreground">{cat?.label}{exp.is_recurring ? " • Fijo" : ""}</p>
+                      </div>
+                      <span className="text-sm font-semibold text-foreground pr-8">{formatQ(exp.amount || 0)}</span>
+                    </button>
+                    {/* Delete button positioned absolute to not trigger the edit above */}
                     <button
-                      onClick={() => deleteExpenseMutation.mutate(exp.id)}
-                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      onClick={(e) => { e.stopPropagation(); deleteExpenseMutation.mutate(exp.id); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive active:scale-[0.80] transition-all"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -154,16 +179,18 @@ export default function Gastos() {
       )}
 
       <button
-        onClick={() => setShowAdd(true)}
+        onClick={() => { setEditingExpense(null); setShowAdd(true); }}
         className="fixed bottom-20 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform hover:scale-105 active:scale-95"
       >
         <Plus className="h-6 w-6" />
       </button>
 
+      {/* Main Add/Edit Form - handles conditional logic via initialData param internally */}
       <AddExpenseModal
-        open={showAdd}
-        onClose={() => setShowAdd(false)}
-        onSave={(exp) => addExpenseMutation.mutate(exp)}
+        open={showAdd || !!editingExpense}
+        initialData={editingExpense}
+        onClose={() => { setShowAdd(false); setEditingExpense(null) }}
+        onSave={(exp) => upsertExpenseMutation.mutate(exp)}
       />
     </div>
   );

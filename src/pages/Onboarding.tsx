@@ -107,15 +107,8 @@ export default function Onboarding() {
           date: new Date().toISOString(),
           is_recurring: true,
         }));
+        // Insert expenses to db
         await supabase.from("expenses").insert(expensesToInsert);
-        
-        // Sugerir budget_limits básicos (opcional pero pedido en docs)
-        const budgetsToInsert = data.expenses.map((e) => ({
-          user_id: user.id,
-          category: e.categoryId,
-          monthly_limit: Number(e.amount) || 0,
-        }));
-        await supabase.from("budget_limits").insert(budgetsToInsert);
       }
 
       // 4. Insertar meta

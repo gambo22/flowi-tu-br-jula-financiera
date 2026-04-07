@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X } from "lucide-react";
-import { EXPENSE_CATEGORIES, formatQ } from "@/lib/constants";
+import { EXPENSE_CATEGORIES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,9 @@ import { Switch } from "@/components/ui/switch";
 interface AddExpenseModalProps {
   open: boolean;
   onClose: () => void;
+  initialData?: any;
   onSave: (expense: {
+    id?: string;
     amount: number;
     category: string;
     date: string;
@@ -18,28 +20,43 @@ interface AddExpenseModalProps {
   }) => void;
 }
 
-export default function AddExpenseModal({ open, onClose, onSave }: AddExpenseModalProps) {
+export default function AddExpenseModal({ open, onClose, initialData, onSave }: AddExpenseModalProps) {
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [note, setNote] = useState("");
   const [isRecurring, setIsRecurring] = useState(false);
 
+  useEffect(() => {
+    if (open) {
+      if (initialData) {
+        setAmount(initialData.amount ? initialData.amount.toString() : "");
+        setCategory(initialData.category || "");
+        setDate(initialData.date ? new Date(initialData.date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
+        setNote(initialData.note || "");
+        setIsRecurring(!!initialData.is_recurring);
+      } else {
+        setAmount("");
+        setCategory("");
+        setDate(new Date().toISOString().split("T")[0]);
+        setNote("");
+        setIsRecurring(false);
+      }
+    }
+  }, [open, initialData]);
+
   if (!open) return null;
 
   const handleSave = () => {
     if (!amount || !category) return;
     onSave({
+      id: initialData?.id,
       amount: parseFloat(amount),
       category,
       date,
       note,
       is_recurring: isRecurring,
     });
-    setAmount("");
-    setCategory("");
-    setNote("");
-    setIsRecurring(false);
     onClose();
   };
 
@@ -47,7 +64,7 @@ export default function AddExpenseModal({ open, onClose, onSave }: AddExpenseMod
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-foreground/40 backdrop-blur-sm">
       <div className="animate-slide-up w-full max-w-lg rounded-t-2xl sm:rounded-2xl bg-card p-6 max-h-[90vh] overflow-y-auto">
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-foreground">Nuevo gasto</h2>
+          <h2 className="text-xl font-bold text-foreground">{initialData ? "Editar gasto" : "Nuevo gasto"}</h2>
           <button onClick={onClose} className="rounded-full p-1 hover:bg-muted">
             <X className="h-5 w-5 text-muted-foreground" />
           </button>
@@ -110,7 +127,7 @@ export default function AddExpenseModal({ open, onClose, onSave }: AddExpenseMod
         </div>
 
         <Button onClick={handleSave} className="w-full" size="lg" disabled={!amount || !category}>
-          Guardar gasto ✨
+          {initialData ? "Actualizar gasto ✨" : "Guardar gasto ✨"}
         </Button>
       </div>
     </div>
