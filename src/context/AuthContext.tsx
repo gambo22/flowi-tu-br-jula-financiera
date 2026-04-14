@@ -8,10 +8,25 @@ export interface UserProfile {
   id: string;
   name: string | null;
   email: string | null;
+  // Legacy income fields
   monthly_income: number | null;
-  income_type: "fixed" | "variable" | "mixed" | null;
+  income_type: string | null;
   income_min: number | null;
   income_max: number | null;
+  // New income fields
+  income_frequency: string | null;
+  income_period_1: number | null;
+  income_period_2: number | null;
+  income_period_3: number | null;
+  income_period_4: number | null;
+  income_this_month: number | null;
+  // Payment day fields
+  payment_day_type: string | null;
+  payment_day_1: number | null;
+  payment_day_2: number | null;
+  // Cash / accounts
+  cash_on_hand: number | null;
+  // Onboarding
   onboarding_complete: boolean;
 }
 

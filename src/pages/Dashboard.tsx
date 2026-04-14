@@ -92,6 +92,7 @@ export default function Dashboard() {
 
   const totalSpentVariable = currentMonthExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   const totalSpentFixed = fixedExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const totalSpent = totalSpentFixed + totalSpentVariable;
   
   const accountsTotal = accounts.reduce((sum: number, acc: any) => sum + (Number(acc.balance) || 0), 0);
   const liquidWealth = rawCash + accountsTotal;

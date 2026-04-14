@@ -7,14 +7,294 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
-      [_ in never]: never
+      users: {
+        Row: {
+          id: string
+          name: string | null
+          income_type: string | null
+          income_min: number | null
+          income_max: number | null
+          income_frequency: string | null
+          income_period_1: number | null
+          income_period_2: number | null
+          income_period_3: number | null
+          income_period_4: number | null
+          monthly_income: number | null
+          income_this_month: number | null
+          payment_day_type: string | null
+          payment_day_1: number | null
+          payment_day_2: number | null
+          cash_on_hand: number | null
+          onboarding_complete: boolean | null
+          created_at: string | null
+        }
+        Insert: {
+          id: string
+          name?: string | null
+          income_type?: string | null
+          income_min?: number | null
+          income_max?: number | null
+          income_frequency?: string | null
+          income_period_1?: number | null
+          income_period_2?: number | null
+          income_period_3?: number | null
+          income_period_4?: number | null
+          monthly_income?: number | null
+          income_this_month?: number | null
+          payment_day_type?: string | null
+          payment_day_1?: number | null
+          payment_day_2?: number | null
+          cash_on_hand?: number | null
+          onboarding_complete?: boolean | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string | null
+          income_type?: string | null
+          income_min?: number | null
+          income_max?: number | null
+          income_frequency?: string | null
+          income_period_1?: number | null
+          income_period_2?: number | null
+          income_period_3?: number | null
+          income_period_4?: number | null
+          monthly_income?: number | null
+          income_this_month?: number | null
+          payment_day_type?: string | null
+          payment_day_1?: number | null
+          payment_day_2?: number | null
+          cash_on_hand?: number | null
+          onboarding_complete?: boolean | null
+          created_at?: string | null
+        }
+      }
+      expenses: {
+        Row: {
+          id: string
+          user_id: string
+          amount: number
+          category: string
+          note: string | null
+          date: string
+          is_recurring: boolean | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          amount: number
+          category: string
+          note?: string | null
+          date: string
+          is_recurring?: boolean | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          amount?: number
+          category?: string
+          note?: string | null
+          date?: string
+          is_recurring?: boolean | null
+          created_at?: string | null
+        }
+      }
+      budget_limits: {
+        Row: {
+          id: string
+          user_id: string
+          category: string
+          monthly_limit: number
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          category: string
+          monthly_limit: number
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          category?: string
+          monthly_limit?: number
+          created_at?: string | null
+        }
+      }
+      goals: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          type: string | null
+          total_amount: number
+          current_saved: number | null
+          monthly_payment: number | null
+          priority: number | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          type?: string | null
+          total_amount: number
+          current_saved?: number | null
+          monthly_payment?: number | null
+          priority?: number | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          type?: string | null
+          total_amount?: number
+          current_saved?: number | null
+          monthly_payment?: number | null
+          priority?: number | null
+          created_at?: string | null
+        }
+      }
+      fixed_expenses: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          category: string
+          amount: number
+          payment_day: number
+          payment_day_type: string | null
+          is_active: boolean | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          category: string
+          amount: number
+          payment_day: number
+          payment_day_type?: string | null
+          is_active?: boolean | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          category?: string
+          amount?: number
+          payment_day?: number
+          payment_day_type?: string | null
+          is_active?: boolean | null
+          created_at?: string | null
+        }
+      }
+      fixed_expense_payments: {
+        Row: {
+          id: string
+          fixed_expense_id: string
+          user_id: string
+          amount_paid: number | null
+          payment_date: string
+          month: number
+          year: number
+          confirmed: boolean | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          fixed_expense_id: string
+          user_id: string
+          amount_paid?: number | null
+          payment_date: string
+          month: number
+          year: number
+          confirmed?: boolean | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          fixed_expense_id?: string
+          user_id?: string
+          amount_paid?: number | null
+          payment_date?: string
+          month?: number
+          year?: number
+          confirmed?: boolean | null
+          created_at?: string | null
+        }
+      }
+      accounts: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          balance: number | null
+          type: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          balance?: number | null
+          type?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          balance?: number | null
+          type?: string | null
+          created_at?: string | null
+        }
+      }
+      debts: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          total_amount: number
+          remaining_amount: number | null
+          monthly_payment: number | null
+          interest_rate: number | null
+          category: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          total_amount: number
+          remaining_amount?: number | null
+          monthly_payment?: number | null
+          interest_rate?: number | null
+          category?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          total_amount?: number
+          remaining_amount?: number | null
+          monthly_payment?: number | null
+          interest_rate?: number | null
+          category?: string | null
+          created_at?: string | null
+        }
+      }
     }
     Views: {
       [_ in never]: never
