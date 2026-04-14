@@ -1,4 +1,4 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -7,15 +7,41 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/context/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import BottomNav from "@/components/BottomNav";
-import Dashboard from "./pages/Dashboard";
-import Gastos from "./pages/Gastos";
-import Presupuesto from "./pages/Presupuesto";
-import Suenos from "./pages/Suenos";
-import Deudas from "./pages/Deudas";
-import Perfil from "./pages/Perfil";
-import Auth from "./pages/Auth";
-import NotFound from "./pages/NotFound";
-import Onboarding from "./pages/Onboarding";
+
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Gastos = lazy(() => import("./pages/Gastos"));
+const Presupuesto = lazy(() => import("./pages/Presupuesto"));
+const Suenos = lazy(() => import("./pages/Suenos"));
+const Deudas = lazy(() => import("./pages/Deudas"));
+const Perfil = lazy(() => import("./pages/Perfil"));
+const Auth = lazy(() => import("./pages/Auth"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+
+const FlowiSplash = () => (
+  <div style={{
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100vh',
+    background: '#10B981',
+    gap: '12px',
+  }}>
+    <div style={{ color: 'white', fontSize: '32px', fontWeight: '800', letterSpacing: '-0.5px' }}>
+      Flowi
+    </div>
+    <div style={{
+      width: '32px',
+      height: '32px',
+      border: '3px solid rgba(255,255,255,0.3)',
+      borderTop: '3px solid white',
+      borderRadius: '50%',
+      animation: 'spin 0.8s linear infinite',
+    }} />
+    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  </div>
+);
 
 const queryClient = new QueryClient();
 
@@ -26,23 +52,25 @@ function AppLayout() {
   return (
     <>
       <main className="mx-auto min-h-screen max-w-lg">
-        <Routes>
-          {/* Public routes */}
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/onboarding" element={<Onboarding />} />
+        <Suspense fallback={<FlowiSplash />}>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/onboarding" element={<Onboarding />} />
 
-          {/* Protected routes */}
-          <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/gastos" element={<Gastos />} />
-            <Route path="/presupuesto" element={<Presupuesto />} />
-            <Route path="/suenos" element={<Suenos />} />
-            <Route path="/deudas" element={<Deudas />} />
-            <Route path="/perfil" element={<Perfil />} />
-          </Route>
+            {/* Protected routes */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/gastos" element={<Gastos />} />
+              <Route path="/presupuesto" element={<Presupuesto />} />
+              <Route path="/suenos" element={<Suenos />} />
+              <Route path="/deudas" element={<Deudas />} />
+              <Route path="/perfil" element={<Perfil />} />
+            </Route>
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </main>
       {!isAuthOrOnboarding && <BottomNav />}
     </>
