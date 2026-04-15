@@ -130,6 +130,24 @@ export default function Perfil() {
     }
   };
 
+  const [resetSent, setResetSent] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const handleResetPassword = async () => {
+    if (!user?.email) return;
+    setResetLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: `${window.location.origin}/auth`,
+    });
+    setResetLoading(false);
+    if (error) {
+      toast.error("Error enviando correo de recuperación.");
+    } else {
+      setResetSent(true);
+      toast.success("Correo enviado. Revisá tu bandeja.");
+    }
+  };
+
   const getInitials = (str: string) => str ? str.trim().charAt(0).toUpperCase() : "U";
 
   // Dark mode inline
@@ -335,6 +353,21 @@ export default function Perfil() {
                 <p className="text-xs text-muted-foreground">Cuida tus ojos de noche</p>
               </div>
               <Switch checked={isDark} onCheckedChange={(val) => toggleDarkMode(val)} />
+            </div>
+
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Cambiar contraseña</p>
+                <p className="text-xs text-muted-foreground">
+                  {resetSent ? "✅ Revisá tu correo" : "Te enviamos un link a " + user?.email}
+                </p>
+              </div>
+              <button onClick={handleResetPassword} disabled={resetLoading || resetSent}
+                className="text-xs font-bold text-primary disabled:opacity-50 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-1.5">
+                {resetLoading
+                  ? <span className="h-3 w-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                  : resetSent ? "Enviado ✓" : "Enviar link"}
+              </button>
             </div>
 
             <div className="p-4 flex items-center justify-between text-left w-full hover:bg-muted/50 cursor-pointer text-destructive" onClick={handleSignOut}>

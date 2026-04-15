@@ -37,6 +37,11 @@ export default function Auth() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
+
   const { refreshProfile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -93,6 +98,20 @@ export default function Auth() {
     setMode((m) => (m === "login" ? "register" : "login"));
     setError(null);
     setSuccessMsg(null);
+  };
+
+  const handleForgotPassword = async () => {
+    if (!forgotEmail) return;
+    setForgotLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+      redirectTo: `${window.location.origin}/auth`,
+    });
+    setForgotLoading(false);
+    if (error) {
+      setError("No pudimos enviar el correo. Verificá el email ingresado.");
+    } else {
+      setForgotSent(true);
+    }
   };
 
   return (
@@ -195,6 +214,14 @@ export default function Auth() {
             {mode === "register" && (
               <p className="mt-1 text-xs text-muted-foreground">Mínimo 6 caracteres</p>
             )}
+            {mode === "login" && (
+              <div className="text-right mt-1">
+                <button type="button" onClick={() => { setShowForgotPassword(true); setForgotEmail(email); setForgotSent(false); }}
+                  className="text-xs text-primary hover:underline font-medium">
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Error message */}
@@ -249,6 +276,45 @@ export default function Auth() {
       <p className="mt-6 text-center text-xs text-muted-foreground">
         Flowi no te juzga. Te acompaña. 💚
       </p>
+
+      {showForgotPassword && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
+          <div className="animate-fade-in w-full max-w-sm rounded-2xl bg-card p-6 border border-border shadow-2xl">
+            <h2 className="text-lg font-bold text-foreground mb-1">Recuperar contraseña</h2>
+            <p className="text-sm text-muted-foreground mb-4">Te enviamos un link a tu correo para resetearla.</p>
+
+            {!forgotSent ? (
+              <>
+                <input type="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)}
+                  placeholder="tu@email.com" autoFocus
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground mb-4 focus:border-primary outline-none" />
+                <div className="flex gap-3">
+                  <button onClick={() => setShowForgotPassword(false)}
+                    className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold text-muted-foreground hover:bg-muted transition-colors">
+                    Cancelar
+                  </button>
+                  <button onClick={handleForgotPassword} disabled={forgotLoading || !forgotEmail}
+                    className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-white disabled:opacity-50 flex items-center justify-center gap-2">
+                    {forgotLoading
+                      ? <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                      : "Enviar link"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="text-center">
+                <div className="text-4xl mb-3">📬</div>
+                <p className="text-sm font-semibold text-foreground mb-1">¡Correo enviado!</p>
+                <p className="text-xs text-muted-foreground mb-4">Revisá tu bandeja de entrada (y el spam por si acaso).</p>
+                <button onClick={() => setShowForgotPassword(false)}
+                  className="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-white">
+                  Entendido
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

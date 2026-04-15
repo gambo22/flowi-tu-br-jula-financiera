@@ -245,16 +245,16 @@ export default function Dashboard() {
             </div>
             <div className="flex justify-between">
               <span className="opacity-75">Compromisos fijos</span>
-              <span className="text-red-200 font-bold">- {formatQ(totalSpentFixed)}</span>
+              <span className="font-bold" style={{ color: '#ff6b6b' }}>- {formatQ(totalSpentFixed)}</span>
             </div>
             <div className="flex justify-between">
               <span className="opacity-75">Gastado variable</span>
-              <span className="text-red-200 font-bold">- {formatQ(totalSpentVariable)}</span>
+              <span className="font-bold" style={{ color: '#ff6b6b' }}>- {formatQ(totalSpentVariable)}</span>
             </div>
             {totalDebtPayments > 0 && (
               <div className="flex justify-between">
                 <span className="opacity-75">Pagos de deudas</span>
-                <span className="text-red-200 font-bold">- {formatQ(totalDebtPayments)}</span>
+                <span className="font-bold" style={{ color: '#ff6b6b' }}>- {formatQ(totalDebtPayments)}</span>
               </div>
             )}
             <div className="h-px w-full bg-white/20 my-1" />

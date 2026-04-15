@@ -304,15 +304,17 @@ export default function Suenos() {
             ? `💳 Cuota ${goal.installment_current || 0} de ${goal.installment_total || 0} · Próximo pago: día ${goal.payment_day || "?"}`
             : (goal.down_payment || 0) > 0
             ? `🏠 Juntando enganche · Faltan ${formatQ(remaining)}`
-            : savingsCapacity <= 0
-            ? "📊 Registrá tus gastos para calcular cuándo llegás."
+            : savingsCapacity <= 0 || dataMonthsCount === 0
+            ? "🔍 Registrá tus gastos este mes — en 30 días Flowi ya te puede guiar con precisión."
+            : dataMonthsCount < 2
+            ? `📊 Con ${dataMonthsCount} mes de historial, Flowi está aprendiendo tus patrones. Seguí registrando para que la proyección sea más real.`
             : monthsLeft <= 0
             ? "🎉 ¡Ya casi estás!"
             : viability === "green"
-            ? `✨ Ahorrando ${formatQ(savingsCapacity)}/mes, llegás en ${monthsLeft} mes${monthsLeft !== 1 ? "es" : ""}.`
+            ? `✨ Ahorrando ${formatQ(savingsCapacity)}/mes (promedio real), llegás en ${monthsLeft} mes${monthsLeft !== 1 ? "es" : ""}.`
             : viability === "yellow"
-            ? `💪 Con disciplina ahorrando ${formatQ(savingsCapacity)}/mes, en ${monthsLeft} meses llegás.`
-            : `🌱 Encontrá fugas en tus gastos para acelerar.`;
+            ? `💪 Con disciplina, en ${monthsLeft} meses llegás. Seguí registrando tus gastos para afinar esto.`
+            : `🌱 Encontrá fugas en tus gastos para acelerar hacia tu meta.`;
 
           return (
             <div key={goal.id} className={cn(
