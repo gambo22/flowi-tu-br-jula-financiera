@@ -107,7 +107,8 @@ export default function Dashboard() {
   const liquidWealth = rawCash + accountsTotal;
 
   // Calculo Maestro Dux
-  const available = monthlyIncome - totalSpentFixed - totalSpentVariable; 
+  const totalDebtPayments = debts.reduce((sum: number, d: any) => sum + (d.minimum_payment || 0), 0);
+  const available = monthlyIncome - totalSpentFixed - totalSpentVariable - totalDebtPayments;
 
   const budgetPercent = monthlyIncome > 0 ? Math.round(((totalSpentFixed + totalSpentVariable) / monthlyIncome) * 100) : 0;
   const timePercent = Math.round((dayOfMonth / daysInMonth) * 100);
@@ -251,6 +252,12 @@ export default function Dashboard() {
                 <span className="opacity-75">Gastado variable</span>
                 <span className="text-red-300">- {formatQ(totalSpentVariable)}</span>
              </div>
+              {totalDebtPayments > 0 && (
+                <div className="flex justify-between">
+                  <span className="opacity-75">Pagos de deudas</span>
+                  <span className="text-red-300">- {formatQ(totalDebtPayments)}</span>
+                </div>
+              )}
              <div className="h-px w-full bg-white/20 my-1" />
              <div className="flex justify-between font-bold">
                 <span>Disponible limpio:</span>
