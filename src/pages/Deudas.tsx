@@ -247,36 +247,71 @@ export default function Deudas() {
                 {(() => {
                   const balance = debt.current_balance || 0;
                   const minPay = debt.minimum_payment || 0;
-                  const rate = (debt.interest_rate || 0) / 100 / 12;
-                  const monthsMin = rate > 0 && minPay > 0
-                    ? Math.ceil(Math.log(minPay / (minPay - balance * rate)) / Math.log(1 + rate))
-                    : minPay > 0 ? Math.ceil(balance / minPay) : 0;
-                  const totalInterest = monthsMin > 0 ? (minPay * monthsMin - balance) : 0;
+                  const annualRate = debt.interest_rate || 0;
+                  const rate = annualRate / 100 / 12; // tasa mensual
+
+                  if (balance <= 0 || minPay <= 0) return null;
+
+                  // Meses pagando solo mínimo (amortización estándar)
+                  let monthsMin = 0;
+                  if (rate > 0 && minPay > balance * rate) {
+                    monthsMin = Math.ceil(Math.log(minPay / (minPay - balance * rate)) / Math.log(1 + rate));
+                  } else if (rate === 0) {
+                    monthsMin = Math.ceil(balance / minPay);
+                  } else {
+                    monthsMin = 999; // cuota no cubre interés
+                  }
+
+                  const totalPaidMin = minPay * monthsMin;
+                  const totalInterest = Math.max(totalPaidMin - balance, 0);
+
+                  // Pagando 20% más
                   const extraPay = minPay * 1.2;
-                  const monthsExtra = rate > 0 && extraPay > 0
-                    ? Math.ceil(Math.log(extraPay / (extraPay - balance * rate)) / Math.log(1 + rate))
-                    : extraPay > 0 ? Math.ceil(balance / extraPay) : 0;
+                  let monthsExtra = 0;
+                  if (rate > 0 && extraPay > balance * rate) {
+                    monthsExtra = Math.ceil(Math.log(extraPay / (extraPay - balance * rate)) / Math.log(1 + rate));
+                  } else if (rate === 0) {
+                    monthsExtra = Math.ceil(balance / extraPay);
+                  }
+                  const totalPaidExtra = extraPay * monthsExtra;
+                  const interestSaved = Math.max(totalPaidMin - totalPaidExtra, 0);
                   const monthsSaved = Math.max(monthsMin - monthsExtra, 0);
+
+                  // Punto de inflexión: antes/después de la mitad
+                  const halfPoint = Math.ceil(monthsMin / 2);
+                  const currentMonth = (debt.months_paid || 0);
+                  const isBeforeHalf = currentMonth < halfPoint;
+
                   return (
-                    <>
+                    <div className="mt-3 bg-muted/40 p-3 space-y-2 text-xs">
                       <div className="flex justify-between text-muted-foreground">
                         <span>Pagando solo mínimo:</span>
                         <span className="font-semibold text-foreground">
-                          {monthsMin > 0 ? `${monthsMin} meses` : "—"}
+                          {monthsMin >= 999 ? "⚠️ Cuota no cubre interés" : `${monthsMin} meses`}
                         </span>
                       </div>
-                      {totalInterest > 500 && (
+                      {totalInterest > 0 && (
                         <div className="flex justify-between text-muted-foreground">
-                          <span>Interés total estimado:</span>
+                          <span>Pagarás en intereses:</span>
                           <span className="font-semibold text-destructive">{formatQ(totalInterest)}</span>
                         </div>
                       )}
-                      {monthsSaved > 2 && (
-                        <div className="mt-1 rounded-lg bg-green-500/10 border border-green-500/20 p-2 text-green-600">
-                          💡 Pagando 20% más ({formatQ(extraPay)}/mes) ahorrarías {monthsSaved} meses
+                      {monthsSaved > 2 && interestSaved > 0 && (
+                        <div className="rounded-lg bg-green-500/10 border border-green-500/20 p-2 text-green-600">
+                          💡 Pagando {formatQ(extraPay)}/mes ahorrarías <strong>{formatQ(interestSaved)}</strong> y {monthsSaved} meses
                         </div>
                       )}
-                    </>
+                      <div className={cn(
+                        "rounded-lg p-2 text-xs",
+                        isBeforeHalf
+                          ? "bg-primary/10 border border-primary/20 text-primary"
+                          : "bg-muted/60 border border-border text-muted-foreground"
+                      )}>
+                        {isBeforeHalf
+                          ? "⚡ Estás en la primera mitad del préstamo. Pagos extra aquí ahorran mucho en intereses."
+                          : "📅 Pasaste la mitad del préstamo. Pagos extra ahora reducen tiempo, no tanto interés."}
+                      </div>
+                    </div>
                   );
                 })()}
               </div>
@@ -296,7 +331,7 @@ export default function Deudas() {
                 ) : paid ? (
                   <><Check className="h-4 w-4" /> Pagado este mes</>
                 ) : (
-                  <><Check className="h-4 w-4" /> Marcar como pagado</>
+                  <><Check className="h-4 w-4" /> Pagar cuota del mes</>
                 )}
               </button>
             </div>
