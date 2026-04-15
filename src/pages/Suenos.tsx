@@ -296,21 +296,23 @@ export default function Suenos() {
           // BLOQUE 1D — Mensaje correcto según tipo y fase
           const message = isCompleted
             ? "🏆 ¡Sueño cumplido! Todas las cuotas pagadas."
-            : pct >= 100 && computedPhase === 'saving' && (goal.installment_total || 0) > 0
-              ? "🎉 ¡Enganche listo! Iniciando fase de cuotas..."
+            : pct >= 100 && computedPhase === "saving" && (goal.installment_total || 0) > 0
+            ? "🎉 ¡Enganche listo! Iniciando fase de cuotas..."
             : pct >= 100
-              ? "🎉 ¡Meta alcanzada! Tenés el dinero completo."
+            ? "🎉 ¡Meta alcanzada! Tenés el dinero completo."
             : isInstallmentPhase
-              ? `💳 Cuota ${goal.installment_current || 0} de ${goal.installment_total || 0} · Próximo pago: día ${goal.payment_day || '?'}`
+            ? `💳 Cuota ${goal.installment_current || 0} de ${goal.installment_total || 0} · Próximo pago: día ${goal.payment_day || "?"}`
             : (goal.down_payment || 0) > 0
-              ? `🏠 Juntando enganche · Faltan ${formatQ(remaining)}`
+            ? `🏠 Juntando enganche · Faltan ${formatQ(remaining)}`
             : savingsCapacity <= 0
-              ? "📊 Registrá tus gastos para calcular cuándo llegás."
-            : viability === 'green'
-              ? `✨ En ${monthsLeft} mes${monthsLeft !== 1 ? 'es' : ''} lo lográs.`
-            : viability === 'yellow'
-              ? `💪 Con disciplina, en ${monthsLeft} meses llegás.`
-              : `🌱 Encontrá fugas en tus gastos para acelerar.`;
+            ? "📊 Registrá tus gastos para calcular cuándo llegás."
+            : monthsLeft <= 0
+            ? "🎉 ¡Ya casi estás!"
+            : viability === "green"
+            ? `✨ Ahorrando ${formatQ(savingsCapacity)}/mes, llegás en ${monthsLeft} mes${monthsLeft !== 1 ? "es" : ""}.`
+            : viability === "yellow"
+            ? `💪 Con disciplina ahorrando ${formatQ(savingsCapacity)}/mes, en ${monthsLeft} meses llegás.`
+            : `🌱 Encontrá fugas en tus gastos para acelerar.`;
 
           return (
             <div key={goal.id} className={cn(

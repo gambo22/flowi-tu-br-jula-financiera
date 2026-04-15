@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import ConfirmModal from "@/components/ConfirmModal";
 
 export default function Presupuesto() {
   const { profile, user, refreshProfile } = useAuth();
@@ -17,6 +18,7 @@ export default function Presupuesto() {
   const [lockingCat, setLockingCat] = useState<string | null>(null);
   const [addingLimit, setAddingLimit] = useState(false);
   const [editingIncome, setEditingIncome] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState<{isOpen: boolean, title: string, message: string, variant?: "default" | "destructive", action: () => void}>({isOpen: false, title: "", message: "", action: () => {}});
 
   const isLocked = (limitRow: any) => {
     if (!limitRow?.locked_until) return false;
@@ -66,6 +68,16 @@ export default function Presupuesto() {
         .from("goals")
         .select("*")
         .eq("user_id", user?.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  const { data: debts = [] } = useQuery({
+    queryKey: ["debts", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("debts").select("*").eq("user_id", user?.id);
       if (error) throw error;
       return data || [];
     },
@@ -203,7 +215,8 @@ export default function Presupuesto() {
 
   const totalSpent = useMemo(() => currentMonthExpenses.reduce((s, e) => s + (e.amount || 0), 0), [currentMonthExpenses]);
   const goalsCommitted = useMemo(() => goals.reduce((s, g) => s + (g.monthly_payment || 0), 0), [goals]);
-  const available = monthlyIncome - totalSpent - goalsCommitted;
+  const totalDebtPayments = useMemo(() => debts.reduce((s: number, d: any) => s + (d.minimum_payment || 0), 0), [debts]);
+  const available = monthlyIncome - totalSpent - goalsCommitted - totalDebtPayments;
 
   const spentByCategory = useMemo(() => {
     const map: Record<string, number> = {};
@@ -262,11 +275,16 @@ export default function Presupuesto() {
           <p className="text-lg font-bold text-foreground">{formatQ(totalSpent)}</p>
         </div>
         <div className="rounded-xl bg-card p-3 border border-border">
-          <p className="text-xs text-muted-foreground">En metas a futuro</p>
+          <p className="text-xs text-muted-foreground">Cuotas de sueños/mes</p>
           <p className="text-lg font-bold text-accent">{formatQ(goalsCommitted)}</p>
+          {goalsCommitted > 0 && (
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Suma de cuotas mensuales de tus metas
+            </p>
+          )}
         </div>
         <div className={cn("rounded-xl p-3 border border-border", (available >= 0 || !hasIncomeConfigured) ? "bg-primary/10" : "bg-destructive/10")}>
-          <p className="text-xs text-muted-foreground">Disponible hoy</p>
+          <p className="text-xs text-muted-foreground">Disponible real</p>
           <p className={cn("text-lg font-bold", available >= 0 ? "text-primary" : "text-destructive")}>
             {formatQ(available)}
           </p>
@@ -325,9 +343,12 @@ export default function Presupuesto() {
                  </div>
                  {!isPaid && (
                    <Button size="sm" variant={dayDist <= 3 ? "default" : "secondary"} className="w-full text-xs font-bold" onClick={() => {
-                      if (window.confirm(`¿Confirmar pago de ${formatQ(exp.amount)} para ${exp.name}?`)) {
-                         confirmPaymentMutation.mutate(exp);
-                      }
+                      setConfirmConfig({
+                        isOpen: true,
+                        title: "Confirmar pago",
+                        message: `¿Confirmar pago de ${formatQ(exp.amount)} para ${exp.name}?`,
+                        action: () => confirmPaymentMutation.mutate(exp)
+                      });
                    }}>
                       Confirmar el Pago de este mes
                    </Button>
@@ -394,7 +415,16 @@ export default function Presupuesto() {
                   )}
                   {limitRow?.id && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); if (window.confirm(`¿Eliminar límite de ${cat.label}?`)) deleteLimitMutation.mutate(limitRow.id); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirmConfig({
+                          isOpen: true,
+                          title: "Eliminar límite",
+                          message: `¿Eliminar límite de ${cat.label}?`,
+                          variant: "destructive",
+                          action: () => deleteLimitMutation.mutate(limitRow.id)
+                        });
+                      }}
                       className="p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors"
                     >
                       <Trash2 className="h-4 w-4" />

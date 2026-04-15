@@ -63,6 +63,20 @@ export default function Perfil() {
     enabled: !!user?.id,
   });
 
+  const { data: debts = [] } = useQuery({
+    queryKey: ["debts", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("debts").select("*").eq("user_id", user?.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  const totalDebt = debts.reduce((s: number, d: any) => s + (d.current_balance || 0), 0);
+  const totalMinPayments = debts.reduce((s: number, d: any) => s + (d.minimum_payment || 0), 0);
+
+
   const updateProfileMutation = useMutation({
     mutationFn: async (updates: any) => {
       const { error } = await supabase.from("users").update(updates).eq("id", user?.id);
@@ -277,6 +291,39 @@ export default function Perfil() {
             )}
           </div>
         </section>
+
+        {/* RESUMEN DEUDAS */}
+        {debts.length > 0 && (
+          <section className="mb-8">
+            <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wide uppercase px-1">DEUDAS ACTIVAS</p>
+            <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+              <div className="grid grid-cols-2 divide-x divide-border border-b border-border">
+                <div className="p-4">
+                  <p className="text-xs text-muted-foreground">Total adeudado</p>
+                  <p className="text-lg font-bold text-destructive">{formatQ(totalDebt)}</p>
+                </div>
+                <div className="p-4">
+                  <p className="text-xs text-muted-foreground">Pagos mín/mes</p>
+                  <p className="text-lg font-bold text-foreground">{formatQ(totalMinPayments)}</p>
+                </div>
+              </div>
+              <div className="divide-y divide-border/50">
+                {debts.map((d: any) => (
+                  <div key={d.id} className="p-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{d.name}</p>
+                      <p className="text-xs text-muted-foreground">{d.type} · {d.interest_rate}% anual</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-destructive">{formatQ(d.current_balance || 0)}</p>
+                      <p className="text-xs text-muted-foreground">Mín: {formatQ(d.minimum_payment || 0)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* CONFIGURACIONES */}
         <section>

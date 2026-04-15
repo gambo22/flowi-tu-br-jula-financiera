@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import ConfirmModal from "@/components/ConfirmModal";
 
 type Strategy = "snowball" | "avalanche";
 
@@ -18,6 +19,7 @@ export default function Deudas() {
   const [strategy, setStrategy] = useState<Strategy>("snowball");
   const [showForm, setShowForm] = useState(false);
   const [editingDebt, setEditingDebt] = useState<any>(null);
+  const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: "", message: "", debtId: "" });
 
   const today = new Date();
   const currentMonth = today.getMonth() + 1;
@@ -215,7 +217,12 @@ export default function Deudas() {
                     <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                   </button>
                   <button
-                    onClick={() => { if (confirm(`¿Eliminar "${debt.name}"?`)) deleteDebtMutation.mutate(debt.id); }}
+                    onClick={() => setConfirmConfig({
+                      isOpen: true,
+                      title: "Eliminar deuda",
+                      message: `¿Estás seguro de que deseas eliminar la deuda "${debt.name}"? Esta acción no se puede deshacer.`,
+                      debtId: debt.id
+                    })}
                     className="p-1 rounded-lg hover:bg-destructive/10 transition-colors"
                   >
                     <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -235,6 +242,43 @@ export default function Deudas() {
                   <p className="text-xs text-muted-foreground">Pago mín.</p>
                   <p className="text-sm font-bold text-foreground">{formatQ(debt.minimum_payment || 0)}</p>
                 </div>
+              </div>
+              <div className="mt-3 rounded-xl bg-muted/40 p-3 space-y-1.5 text-xs mb-3">
+                {(() => {
+                  const balance = debt.current_balance || 0;
+                  const minPay = debt.minimum_payment || 0;
+                  const rate = (debt.interest_rate || 0) / 100 / 12;
+                  const monthsMin = rate > 0 && minPay > 0
+                    ? Math.ceil(Math.log(minPay / (minPay - balance * rate)) / Math.log(1 + rate))
+                    : minPay > 0 ? Math.ceil(balance / minPay) : 0;
+                  const totalInterest = monthsMin > 0 ? (minPay * monthsMin - balance) : 0;
+                  const extraPay = minPay * 1.2;
+                  const monthsExtra = rate > 0 && extraPay > 0
+                    ? Math.ceil(Math.log(extraPay / (extraPay - balance * rate)) / Math.log(1 + rate))
+                    : extraPay > 0 ? Math.ceil(balance / extraPay) : 0;
+                  const monthsSaved = Math.max(monthsMin - monthsExtra, 0);
+                  return (
+                    <>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Pagando solo mínimo:</span>
+                        <span className="font-semibold text-foreground">
+                          {monthsMin > 0 ? `${monthsMin} meses` : "—"}
+                        </span>
+                      </div>
+                      {totalInterest > 500 && (
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>Interés total estimado:</span>
+                          <span className="font-semibold text-destructive">{formatQ(totalInterest)}</span>
+                        </div>
+                      )}
+                      {monthsSaved > 2 && (
+                        <div className="mt-1 rounded-lg bg-green-500/10 border border-green-500/20 p-2 text-green-600">
+                          💡 Pagando 20% más ({formatQ(extraPay)}/mes) ahorrarías {monthsSaved} meses
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
               <p className="text-xs text-muted-foreground mb-3">Día de pago: {debt.payment_day} de cada mes</p>
               <button
@@ -280,6 +324,21 @@ export default function Deudas() {
           onClose={() => setEditingDebt(null)}
           onSave={(d) => updateDebtMutation.mutate({ ...d, id: editingDebt.id })}
           isSaving={updateDebtMutation.isPending}
+        />
+      )}
+
+      {confirmConfig.isOpen && (
+        <ConfirmModal
+          title={confirmConfig.title}
+          message={confirmConfig.message}
+          variant="destructive"
+          onConfirm={() => {
+            if (confirmConfig.debtId) {
+              deleteDebtMutation.mutate(confirmConfig.debtId);
+            }
+            setConfirmConfig({ ...confirmConfig, isOpen: false });
+          }}
+          onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
         />
       )}
     </div>
