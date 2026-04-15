@@ -142,8 +142,18 @@ export default function Suenos() {
           const currentSaved = goal.current_saved || goal.saved_amount || 0;
           const pct = Math.round((currentSaved / target) * 100);
           const remaining = target - currentSaved;
-          const monthsLeft = savingsCapacity > 0 && remaining > 0 ? Math.ceil(remaining / savingsCapacity) : 0;
-          const viability = remaining <= 0 ? "green" : monthsLeft <= 12 ? "green" : monthsLeft <= 24 ? "yellow" : "red";
+          const monthsLeft = savingsCapacity > 0 && remaining > 0
+            ? Math.ceil(remaining / savingsCapacity)
+            : 0;
+          const viability = remaining <= 0
+            ? "green"
+            : savingsCapacity <= 0
+              ? "red"
+              : monthsLeft <= 12
+                ? "green"
+                : monthsLeft <= 24
+                  ? "yellow"
+                  : "red";
 
           return (
             <div key={goal.id} className="rounded-2xl bg-card p-4 border border-border shadow-sm transition-all">
@@ -200,10 +210,15 @@ export default function Suenos() {
                 viability === "yellow" ? "bg-warning/10 text-warning" :
                 "bg-destructive/10 text-destructive"
               )}>
-                {pct >= 100 ? "🎉 ¡Meta alcanzada! Felicidades, tienes el dinero completo." :
-                 viability === "green" ? `Excelente ritmo. En ${monthsLeft} meses manteniéndote así lo logras.` :
-                 viability === "yellow" ? `💪 Es posible. Con disciplina, en ${monthsLeft} meses llegas.` :
-                 `🌱 Hoy parece lejos. Registra gastos y encuentra fugas para aumentar ahorro.`}
+                {pct >= 100
+                  ? "🎉 ¡Meta alcanzada! Felicidades, tienes el dinero completo."
+                  : savingsCapacity <= 0
+                    ? "📊 Registra todos tus gastos para calcular cuándo llegas a tu meta."
+                    : viability === "green"
+                      ? `✨ Excelente ritmo. En ${monthsLeft} mes${monthsLeft !== 1 ? 'es' : ''} lo lográs.`
+                      : viability === "yellow"
+                        ? `💪 Es posible. Con disciplina, en ${monthsLeft} meses llegás.`
+                        : `🌱 Empieza registrando todos tus gastos. Encontrá fugas para aumentar tu ahorro.`}
               </div>
 
               {goal.monthly_payment > 0 && (

@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatQ, EXPENSE_CATEGORIES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, LogOut, Wallet, ShieldCheck, Plus, Trash2, Edit2, Calculator, DollarSign, Building2, Landmark, Banknote } from "lucide-react";
+import { ChevronLeft, LogOut, ShieldCheck, Plus, Trash2, Edit2, Banknote, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,14 +24,9 @@ export default function Perfil() {
   const [editingCash, setEditingCash] = useState(false);
   const [cashAmount, setCashAmount] = useState(profile?.cash_on_hand?.toString() || "0");
 
-  // Expenses management (Fijos / Recurring)
+  // Fixed expenses management
   const [showAddFixed, setShowAddFixed] = useState(false);
   const [editingExpense, setEditingExpense] = useState<any>(null);
-
-  // Account management
-  const [addingAccount, setAddingAccount] = useState(false);
-  const [accName, setAccName] = useState("");
-  const [accBalance, setAccBalance] = useState("");
 
   const { data: fixedExpenses = [] } = useQuery({
     queryKey: ["fixed_expenses", user?.id],
@@ -57,9 +52,9 @@ export default function Perfil() {
         .order("created_at", { ascending: false });
       // Ignoring strictly created_at if non-existent, falling back to id sort via default
       if (error) {
-        if(error.code === '42703') {
-           const {data: fbData} = await supabase.from('accounts').select('*').eq('user_id', user?.id);
-           return fbData || [];
+        if (error.code === '42703') {
+          const { data: fbData } = await supabase.from('accounts').select('*').eq('user_id', user?.id);
+          return fbData || [];
         }
         throw error;
       }
@@ -68,7 +63,6 @@ export default function Perfil() {
     enabled: !!user?.id,
   });
 
-  // Mutations
   const updateProfileMutation = useMutation({
     mutationFn: async (updates: any) => {
       const { error } = await supabase.from("users").update(updates).eq("id", user?.id);
@@ -79,35 +73,6 @@ export default function Perfil() {
       toast.success("Perfil actualizado");
       setEditingField(null);
       setEditingCash(false);
-    },
-  });
-
-  const addAccountMutation = useMutation({
-    mutationFn: async (acc: any) => {
-      const { error } = await supabase.from("accounts").insert({
-        user_id: user?.id,
-        name: acc.name,
-        balance: acc.balance,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["accounts", user?.id] });
-      toast.success("Cuenta nueva agregada");
-      setAddingAccount(false);
-      setAccName("");
-      setAccBalance("");
-    },
-  });
-
-  const delAccountMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("accounts").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["accounts", user?.id] });
-      toast.success("Cuenta eliminada");
     },
   });
 
@@ -158,7 +123,7 @@ export default function Perfil() {
 
   const toggleDarkMode = (val: boolean) => {
     setIsDark(val);
-    if(val) {
+    if (val) {
       document.documentElement.classList.add('dark');
       localStorage.setItem('theme', 'dark');
     } else {
@@ -173,7 +138,7 @@ export default function Perfil() {
     if (profile?.income_frequency === 'biweekly') return "Quincenal";
     if (profile?.income_frequency === 'weekly') return "Semanal";
     if (profile?.income_frequency === 'variable') return "Emprendedor/Variable";
-    return profile?.income_type || "Fijo"; 
+    return profile?.income_type || "Fijo";
   };
 
 
@@ -184,11 +149,11 @@ export default function Perfil() {
           <ChevronLeft className="h-6 w-6" />
         </Link>
         <span className="text-md font-semibold text-foreground">Ajustes</span>
-        <div className="w-10"></div> 
+        <div className="w-10"></div>
       </div>
 
       <div className="space-y-6">
-        
+
         {/* MI PERFIL SECTION */}
         <section>
           <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wide uppercase px-1">MI PERFIL</p>
@@ -220,75 +185,49 @@ export default function Perfil() {
 
               {/* Ingreso Editable Complejo */}
               <div className="p-4 bg-transparent cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setEditingField("incomeModal")}>
-                 <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-muted-foreground font-medium mb-1">Tu Ingreso ({parseIncomeLabel()})</p>
-                      <p className="text-lg font-bold text-primary">{formatQ(profile?.monthly_income || 0)}</p>
-                      {profile?.income_this_month && <p className="text-[10px] bg-warning/20 text-warning px-1.5 py-0.5 rounded mt-1 inline-block">Mes Excepcional Modificado</p>}
-                    </div>
-                    <Edit2 className="h-4 w-4 text-muted-foreground opacity-50" />
-                 </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground font-medium mb-1">Tu Ingreso ({parseIncomeLabel()})</p>
+                    <p className="text-lg font-bold text-primary">{formatQ(profile?.monthly_income || 0)}</p>
+                    {profile?.income_this_month && <p className="text-[10px] bg-warning/20 text-warning px-1.5 py-0.5 rounded mt-1 inline-block">Mes Excepcional Modificado</p>}
+                  </div>
+                  <Edit2 className="h-4 w-4 text-muted-foreground opacity-50" />
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* MI DINERO REAL (EFECTIVO Y CUENTAS) */}
+        {/* EFECTIVO DISPONIBLE */}
         <section>
-          <div className="flex items-center justify-between px-1 mb-3">
-            <p className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">MI DINERO REAL</p>
-            <button onClick={() => setAddingAccount(true)} className="text-xs text-primary font-bold hover:underline">+ Agregar banco</button>
-          </div>
-          
-          <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm divide-y divide-border/50">
-            {/* Efectivo físico - Inline editable */}
+          <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wide uppercase px-1">EFECTIVO DISPONIBLE</p>
+          <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
             <div className="p-4 bg-transparent cursor-pointer hover:bg-muted/50 transition-colors group" onClick={() => setEditingCash(true)}>
-                {editingCash ? (
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">Q</span>
-                        <input type="number" autoFocus value={cashAmount} onChange={(e) => setCashAmount(e.target.value)} className="w-full rounded-xl border border-border bg-background py-2.5 pl-8 pr-4 text-sm focus:border-primary outline-none" />
-                    </div>
-                    <Button onClick={(e) => { 
-                      e.stopPropagation(); 
-                      updateProfileMutation.mutate({ cash_on_hand: parseFloat(cashAmount)||0, cash_updated_at: new Date().toISOString() }); 
-                    }}>Guardar</Button>
+              {editingCash ? (
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">Q</span>
+                    <input type="number" autoFocus value={cashAmount} onChange={(e) => setCashAmount(e.target.value)} className="w-full rounded-xl border border-border bg-background py-2.5 pl-8 pr-4 text-sm focus:border-primary outline-none" />
                   </div>
-                ) : (
-                  <div className="flex items-center gap-3">
-                     <div className="h-10 w-10 bg-green-500/10 text-green-600 flex items-center justify-center rounded-xl"><Banknote className="h-5 w-5"/></div>
-                     <div className="flex-1">
-                        <p className="text-sm font-bold text-foreground">Efectivo Físico</p>
-                        <p className="text-xs text-muted-foreground">Billetera, en la casa o sobrecitos.</p>
-                     </div>
-                     <div className="text-right">
-                       <p className="text-sm font-bold text-foreground">{formatQ(profile?.cash_on_hand || 0)}</p>
-                       {profile?.cash_updated_at && <p className="text-[10px] text-muted-foreground">Act: {new Date(profile.cash_updated_at).toLocaleDateString()}</p>}
-                     </div>
-                     <Edit2 className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                  <Button onClick={(e) => {
+                    e.stopPropagation();
+                    updateProfileMutation.mutate({ cash_on_hand: parseFloat(cashAmount) || 0 });
+                  }}>Guardar</Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 bg-green-500/10 text-green-600 flex items-center justify-center rounded-xl"><Banknote className="h-5 w-5" /></div>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-foreground">Efectivo a mano</p>
+                    <p className="text-xs text-muted-foreground">Billetera, en casa o sobrecitos. Toca para actualizar.</p>
                   </div>
-                )}
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-foreground">{formatQ(profile?.cash_on_hand || 0)}</p>
+                  </div>
+                  <Edit2 className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                </div>
+              )}
             </div>
-
-            {/* Cuentas interactivas */}
-            {accounts.map((acc: any) => (
-              <div key={acc.id} className="p-4 flex items-center gap-3 group">
-                 <div className="h-10 w-10 bg-blue-500/10 text-blue-600 flex items-center justify-center rounded-xl"><Landmark className="h-5 w-5"/></div>
-                 <div className="flex-1">
-                    <p className="text-sm font-bold text-foreground">{acc.name}</p>
-                 </div>
-                 <p className="text-sm font-bold text-foreground">{formatQ(acc.balance || 0)}</p>
-                 <button className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive p-1 rounded transition-all" onClick={() => delAccountMutation.mutate(acc.id)}>
-                   <Trash2 className="h-4 w-4"/>
-                 </button>
-              </div>
-            ))}
-            
-            {accounts.length === 0 && (
-               <div className="p-4 bg-muted/20 text-center">
-                 <p className="text-xs text-muted-foreground">Añade Bancos, Tigo Money, etc, para ver tu patrimonio líquido total real.</p>
-               </div>
-            )}
           </div>
         </section>
 
@@ -301,7 +240,7 @@ export default function Perfil() {
               <button onClick={() => setShowAddFixed(true)} className="text-xs text-primary font-bold hover:underline">+ Agregar fijo</button>
             )}
           </div>
-          
+
           <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
             {fixedExpenses.length === 0 ? (
               <div className="p-6 text-center bg-card">
@@ -317,21 +256,21 @@ export default function Perfil() {
                   const cat = EXPENSE_CATEGORIES.find((c) => c.id === exp.category);
                   const Icon = cat?.icon;
                   return (
-                     <div key={exp.id} className="flex flex-row items-center p-3 hover:bg-muted/30 transition-colors group">
-                       <button onClick={() => setEditingExpense({ ...exp })} className="flex flex-1 items-center gap-3 text-left">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted group-hover:bg-background">
-                            {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-foreground truncate">{exp.name || cat?.label}</p>
-                            <p className="text-xs text-muted-foreground">Pago el día: {exp.payment_day}</p>
-                          </div>
-                          <span className="text-sm font-bold text-foreground mr-1">{formatQ(exp.amount || 0)}</span>
-                       </button>
-                       <button onClick={(e) => { e.stopPropagation(); deleteFixedExpenseMutation.mutate(exp.id); }} className="p-2 ml-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg">
-                         <Trash2 className="h-4 w-4" />
-                       </button>
-                     </div>
+                    <div key={exp.id} className="flex flex-row items-center p-3 hover:bg-muted/30 transition-colors group">
+                      <button onClick={() => setEditingExpense({ ...exp })} className="flex flex-1 items-center gap-3 text-left">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted group-hover:bg-background">
+                          {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{exp.name || cat?.label}</p>
+                          <p className="text-xs text-muted-foreground">Pago el día: {exp.payment_day}</p>
+                        </div>
+                        <span className="text-sm font-bold text-foreground mr-1">{formatQ(exp.amount || 0)}</span>
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); deleteFixedExpenseMutation.mutate(exp.id); }} className="p-2 ml-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   );
                 })}
               </div>
@@ -339,9 +278,9 @@ export default function Perfil() {
           </div>
         </section>
 
-        {/* CONFIGURACIÓN SECTION */}
+        {/* CONFIGURACIONES */}
         <section>
-          <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wide uppercase px-1">APLICACIÓN</p>
+          <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wide uppercase px-1">CONFIGURACIONES</p>
           <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm divide-y divide-border/50">
             <div className="p-4 flex items-center justify-between bg-transparent">
               <div>
@@ -350,7 +289,7 @@ export default function Perfil() {
               </div>
               <Switch checked={isDark} onCheckedChange={(val) => toggleDarkMode(val)} />
             </div>
-            
+
             <div className="p-4 flex items-center justify-between text-left w-full hover:bg-muted/50 cursor-pointer text-destructive" onClick={handleSignOut}>
               <div>
                 <p className="text-sm font-bold">Cerrar Sesión Segura</p>
@@ -364,41 +303,17 @@ export default function Perfil() {
 
       </div>
 
-      {/* Modal para Editar/Agregar Compromiso Fijo */}
-      { (showAddFixed || !!editingExpense) && (
-         <AddFixedExpenseModal 
-            initialData={editingExpense} 
-            onClose={() => { setShowAddFixed(false); setEditingExpense(null); }} 
-            onSave={(exp) => upsertFixedExpenseMutation.mutate(exp)} 
-         />
-      )}
-
-      {/* Account Modal simple in-place */}
-      {addingAccount && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
-          <div className="animate-fade-in w-full max-w-sm rounded-2xl bg-card p-6 border border-border shadow-2xl">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-foreground">Agregar Cuenta/Banco</h2>
-                <button onClick={() => setAddingAccount(false)} className="rounded-full p-1 hover:bg-muted"><X className="h-5 w-5 text-muted-foreground" /></button>
-              </div>
-              <div className="space-y-4 mb-6">
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Nombre de la cuenta u origen</label>
-                  <Input autoFocus placeholder="Ej: Cuenta BI, Cooperativa Micoope" value={accName} onChange={e=>setAccName(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Balance a favor (Q)</label>
-                  <Input type="number" placeholder="Ej: 3500" value={accBalance} onChange={e=>setAccBalance(e.target.value)} />
-                </div>
-              </div>
-              <Button className="w-full" onClick={()=>addAccountMutation.mutate({name: accName, balance: parseFloat(accBalance)||0})} disabled={!accName||!accBalance}>+ Guardar Billetera</Button>
-          </div>
-        </div>
+      {(showAddFixed || !!editingExpense) && (
+        <AddFixedExpenseModal
+          initialData={editingExpense}
+          onClose={() => { setShowAddFixed(false); setEditingExpense(null); }}
+          onSave={(exp) => upsertFixedExpenseMutation.mutate(exp)}
+        />
       )}
 
       {/* Re-using Income flow inside Profile */}
       {editingField === "incomeModal" && (
-         <IncomeEditorModal profile={profile} onClose={()=>setEditingField(null)} onUserUpdate={()=> { refreshProfile(); setEditingField(null); }} />
+        <IncomeEditorModal profile={profile} onClose={() => setEditingField(null)} onUserUpdate={() => { refreshProfile(); setEditingField(null); }} />
       )}
 
     </div>
@@ -420,18 +335,18 @@ function IncomeEditorModal({ profile, onClose, onUserUpdate }: { profile: any; o
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      const calcMonthly = freq === 'variable' ? ((Number(p1)||0)+(Number(p2)||0))/2 : (Number(p1)||0)+(Number(p2)||0)+(Number(p3)||0)+(Number(p4)||0);
+      const calcMonthly = freq === 'variable' ? ((Number(p1) || 0) + (Number(p2) || 0)) / 2 : (Number(p1) || 0) + (Number(p2) || 0) + (Number(p3) || 0) + (Number(p4) || 0);
       const updates = {
-         income_frequency: freq,
-         income_period_1: Number(p1)||0,
-         income_period_2: Number(p2)||0,
-         income_period_3: Number(p3)||0,
-         income_period_4: Number(p4)||0,
-         monthly_income: calcMonthly,
-         income_this_month: hasDiff ? Number(thisMonth)||0 : null,
-         payment_day_type: payType,
-         payment_day_1: Number(d1) || null,
-         payment_day_2: Number(d2) || null
+        income_frequency: freq,
+        income_period_1: Number(p1) || 0,
+        income_period_2: Number(p2) || 0,
+        income_period_3: Number(p3) || 0,
+        income_period_4: Number(p4) || 0,
+        monthly_income: calcMonthly,
+        income_this_month: hasDiff ? Number(thisMonth) || 0 : null,
+        payment_day_type: payType,
+        payment_day_1: Number(d1) || null,
+        payment_day_2: Number(d2) || null
       };
       const { error } = await supabase.from('users').update(updates).eq('id', profile?.id);
       if (error) throw error;
@@ -443,89 +358,89 @@ function IncomeEditorModal({ profile, onClose, onUserUpdate }: { profile: any; o
   });
 
   return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="animate-fade-in w-full max-w-sm rounded-2xl bg-card p-6 border border-border shadow-2xl my-8">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-foreground">Ajustador Financiero</h2>
-                <button onClick={onClose} className="rounded-full p-1 hover:bg-muted"><X className="h-5 w-5 text-muted-foreground" /></button>
-              </div>
-
-              <div className="space-y-4 mb-6">
-                <div>
-                  <label className="text-sm font-bold text-foreground">¿Cómo recibes el dinero?</label>
-                  <select value={freq} onChange={(e) => setFreq(e.target.value)} className="w-full rounded-xl bg-muted border border-border py-2 px-3 mt-1">
-                    <option value="monthly">1 vez al mes (Mensual)</option>
-                    <option value="biweekly">2 veces (Quincenal)</option>
-                    <option value="weekly">Semanal</option>
-                    <option value="variable">Variable / Negocio Propio</option>
-                  </select>
-                </div>
-
-                <div className="p-3 bg-muted/40 rounded-xl space-y-3">
-                    {freq === 'monthly' && (
-                      <>
-                        <Input type="number" placeholder="Sueldo Base Mensual Q" value={p1} onChange={(e)=>setP1(e.target.value)} />
-                        <label className="text-xs font-semibold block pt-2">¿Cuándo depositan?</label>
-                        <select value={payType} onChange={(e)=>setPayType(e.target.value)} className="w-full text-sm p-2 rounded border bg-card">
-                          <option value="last_business_day">Fin de Mes (Hábil)</option>
-                          <option value="fixed_day">Día fijo</option>
-                        </select>
-                        {payType === 'fixed_day' && <Input type="number" placeholder="Día" value={d1} onChange={e=>setD1(e.target.value)}/>}
-                      </>
-                    )}
-                    {freq === 'biweekly' && (
-                      <>
-                        <div className="grid grid-cols-2 gap-2">
-                           <Input type="number" placeholder="1ra Q" value={p1} onChange={(e)=>setP1(e.target.value)} />
-                           <Input type="number" placeholder="2da Q" value={p2} onChange={(e)=>setP2(e.target.value)} />
-                        </div>
-                        <label className="text-xs font-semibold block pt-2">Condiciones de Quincenas</label>
-                        <select value={payType} onChange={(e)=>setPayType(e.target.value)} className="w-full text-sm p-2 rounded border bg-card">
-                          <option value="last_business_day_15_30">Día 15 y Fin de mes</option>
-                          <option value="fixed_days">Días Fijos Manuales</option>
-                        </select>
-                        {payType === 'fixed_days' && (
-                          <div className="grid grid-cols-2 gap-2 mt-1">
-                             <Input type="number" placeholder="Día Q1" value={d1} onChange={e=>setD1(e.target.value)}/>
-                             <Input type="number" placeholder="Día Q2" value={d2} onChange={e=>setD2(e.target.value)}/>
-                          </div>
-                        )}
-                      </>
-                    )}
-                    {freq === 'weekly' && (
-                       <div className="grid grid-cols-2 gap-2">
-                           <Input type="number" placeholder="S1" value={p1} onChange={(e)=>setP1(e.target.value)} />
-                           <Input type="number" placeholder="S2" value={p2} onChange={(e)=>setP2(e.target.value)} />
-                           <Input type="number" placeholder="S3" value={p3} onChange={(e)=>setP3(e.target.value)} />
-                           <Input type="number" placeholder="S4" value={p4} onChange={(e)=>setP4(e.target.value)} />
-                       </div>
-                    )}
-                    {freq === 'variable' && (
-                       <div className="space-y-2">
-                           <Input type="number" placeholder="Mejor mes histórico Q" value={p1} onChange={(e)=>setP1(e.target.value)} />
-                           <Input type="number" placeholder="Peor mes histórico Q" value={p2} onChange={(e)=>setP2(e.target.value)} />
-                       </div>
-                    )}
-                </div>
-
-                <div className="p-3 bg-muted/40 rounded-xl">
-                    <div className="flex items-center justify-between">
-                       <p className="text-sm font-semibold">Excepciones este mes</p>
-                       <Switch checked={hasDiff} onCheckedChange={setHasDiff}/>
-                    </div>
-                    {hasDiff && (
-                       <div className="mt-3">
-                          <Input type="number" placeholder="Ingreso TOTAL Real en este mes (Q)" value={thisMonth} onChange={e=>setThisMonth(e.target.value)} />
-                          <p className="text-xs text-muted-foreground mt-1">El dashboard usará este monto prioritariamente para calcular tus metas el mes presente.</p>
-                       </div>
-                    )}
-                </div>
-
-              </div>
-
-              <Button className="w-full font-bold" onClick={()=>updateMutation.mutate()}>Grabar Lógica</Button>
-          </div>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="animate-fade-in w-full max-w-sm rounded-2xl bg-card p-6 border border-border shadow-2xl my-8">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-foreground">Ajustador Financiero</h2>
+          <button onClick={onClose} className="rounded-full p-1 hover:bg-muted"><X className="h-5 w-5 text-muted-foreground" /></button>
         </div>
+
+        <div className="space-y-4 mb-6">
+          <div>
+            <label className="text-sm font-bold text-foreground">¿Cómo recibes el dinero?</label>
+            <select value={freq} onChange={(e) => setFreq(e.target.value)} className="w-full rounded-xl bg-muted border border-border py-2 px-3 mt-1">
+              <option value="monthly">1 vez al mes (Mensual)</option>
+              <option value="biweekly">2 veces (Quincenal)</option>
+              <option value="weekly">Semanal</option>
+              <option value="variable">Variable / Negocio Propio</option>
+            </select>
+          </div>
+
+          <div className="p-3 bg-muted/40 rounded-xl space-y-3">
+            {freq === 'monthly' && (
+              <>
+                <Input type="number" placeholder="Sueldo Base Mensual Q" value={p1} onChange={(e) => setP1(e.target.value)} />
+                <label className="text-xs font-semibold block pt-2">¿Cuándo depositan?</label>
+                <select value={payType} onChange={(e) => setPayType(e.target.value)} className="w-full text-sm p-2 rounded border bg-card">
+                  <option value="last_business_day">Fin de Mes (Hábil)</option>
+                  <option value="fixed_day">Día fijo</option>
+                </select>
+                {payType === 'fixed_day' && <Input type="number" placeholder="Día" value={d1} onChange={e => setD1(e.target.value)} />}
+              </>
+            )}
+            {freq === 'biweekly' && (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input type="number" placeholder="1ra Q" value={p1} onChange={(e) => setP1(e.target.value)} />
+                  <Input type="number" placeholder="2da Q" value={p2} onChange={(e) => setP2(e.target.value)} />
+                </div>
+                <label className="text-xs font-semibold block pt-2">Condiciones de Quincenas</label>
+                <select value={payType} onChange={(e) => setPayType(e.target.value)} className="w-full text-sm p-2 rounded border bg-card">
+                  <option value="last_business_day_15_30">Día 15 y Fin de mes</option>
+                  <option value="fixed_days">Días Fijos Manuales</option>
+                </select>
+                {payType === 'fixed_days' && (
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <Input type="number" placeholder="Día Q1" value={d1} onChange={e => setD1(e.target.value)} />
+                    <Input type="number" placeholder="Día Q2" value={d2} onChange={e => setD2(e.target.value)} />
+                  </div>
+                )}
+              </>
+            )}
+            {freq === 'weekly' && (
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="number" placeholder="S1" value={p1} onChange={(e) => setP1(e.target.value)} />
+                <Input type="number" placeholder="S2" value={p2} onChange={(e) => setP2(e.target.value)} />
+                <Input type="number" placeholder="S3" value={p3} onChange={(e) => setP3(e.target.value)} />
+                <Input type="number" placeholder="S4" value={p4} onChange={(e) => setP4(e.target.value)} />
+              </div>
+            )}
+            {freq === 'variable' && (
+              <div className="space-y-2">
+                <Input type="number" placeholder="Mejor mes histórico Q" value={p1} onChange={(e) => setP1(e.target.value)} />
+                <Input type="number" placeholder="Peor mes histórico Q" value={p2} onChange={(e) => setP2(e.target.value)} />
+              </div>
+            )}
+          </div>
+
+          <div className="p-3 bg-muted/40 rounded-xl">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold">Excepciones este mes</p>
+              <Switch checked={hasDiff} onCheckedChange={setHasDiff} />
+            </div>
+            {hasDiff && (
+              <div className="mt-3">
+                <Input type="number" placeholder="Ingreso TOTAL Real en este mes (Q)" value={thisMonth} onChange={e => setThisMonth(e.target.value)} />
+                <p className="text-xs text-muted-foreground mt-1">El dashboard usará este monto prioritariamente para calcular tus metas el mes presente.</p>
+              </div>
+            )}
+          </div>
+
+        </div>
+
+        <Button className="w-full font-bold" onClick={() => updateMutation.mutate()}>Grabar Lógica</Button>
+      </div>
+    </div>
   )
 }
 
@@ -553,26 +468,26 @@ function AddFixedExpenseModal({ initialData, onClose, onSave }: any) {
           <h2 className="text-xl font-bold text-foreground">{initialData ? "Editar Compromiso Fijo" : "Nuevo Compromiso Fijo"}</h2>
         </div>
         <div className="space-y-4 mb-6">
-           <Input type="number" placeholder="Monto (Q)" value={amount} onChange={e => setAmount(e.target.value)} />
-           <Input placeholder="Nombre (Ej: Colegiatura, Renta)" value={name} onChange={e => setName(e.target.value)} />
-           <div>
-              <label className="text-xs font-semibold text-muted-foreground">Día de cobro en el mes (1 - 31)</label>
-              <Input type="number" value={paymentDay} onChange={e => setPaymentDay(e.target.value)} />
-           </div>
-           <div>
-             <label className="text-xs font-semibold text-muted-foreground block mb-2">Icono de la Categoría</label>
-             <div className="grid grid-cols-4 gap-2">
-                {EXPENSE_CATEGORIES.map((cat) => (
-                  <button key={cat.id} onClick={() => setCategory(cat.id)} className={cn("flex flex-col items-center gap-1 rounded-xl p-2.5 text-xs transition-all", category === cat.id ? "bg-primary text-white shadow-md" : "bg-muted hover:bg-muted/80")}>
-                    <cat.icon className="h-5 w-5" />
-                  </button>
-                ))}
-             </div>
-           </div>
+          <Input type="number" placeholder="Monto (Q)" value={amount} onChange={e => setAmount(e.target.value)} />
+          <Input placeholder="Nombre (Ej: Colegiatura, Renta)" value={name} onChange={e => setName(e.target.value)} />
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground">Día de cobro en el mes (1 - 31)</label>
+            <Input type="number" value={paymentDay} onChange={e => setPaymentDay(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground block mb-2">Icono de la Categoría</label>
+            <div className="grid grid-cols-4 gap-2">
+              {EXPENSE_CATEGORIES.map((cat) => (
+                <button key={cat.id} onClick={() => setCategory(cat.id)} className={cn("flex flex-col items-center gap-1 rounded-xl p-2.5 text-xs transition-all", category === cat.id ? "bg-primary text-white shadow-md" : "bg-muted hover:bg-muted/80")}>
+                  <cat.icon className="h-5 w-5" />
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
         <div className="flex gap-2">
-           <Button variant="outline" className="w-1/2" onClick={onClose}>Cancelar</Button>
-           <Button className="w-1/2" disabled={!amount || !category} onClick={handleSave}>Guardar</Button>
+          <Button variant="outline" className="w-1/2" onClick={onClose}>Cancelar</Button>
+          <Button className="w-1/2" disabled={!amount || !category} onClick={handleSave}>Guardar</Button>
         </div>
       </div>
     </div>

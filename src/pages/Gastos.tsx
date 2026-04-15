@@ -43,25 +43,23 @@ export default function Gastos() {
   const upsertExpenseMutation = useMutation({
     mutationFn: async (expense: any) => {
       if (expense.id) {
-        // Edit existing
         const { data, error } = await supabase.from("expenses").update({
           amount: expense.amount,
           category: expense.category,
           date: expense.date,
           note: expense.note,
-          is_recurring: expense.is_recurring,
+          payment_method: expense.payment_method || 'efectivo',
         }).eq("id", expense.id);
         if (error) throw error;
         return data;
       } else {
-        // Insert new
         const { data, error } = await supabase.from("expenses").insert({
           user_id: user?.id,
           amount: expense.amount,
           category: expense.category,
           date: expense.date,
           note: expense.note,
-          is_recurring: expense.is_recurring,
+          payment_method: expense.payment_method || 'efectivo',
         });
         if (error) throw error;
         return data;
@@ -72,6 +70,27 @@ export default function Gastos() {
       setEditingExpense(null);
       if (variables.id) toast.success("Gasto actualizado.");
       else toast.success("¡Gasto registrado con éxito!");
+    },
+  });
+
+  const addFixedExpenseMutation = useMutation({
+    mutationFn: async (exp: any) => {
+      const { error } = await supabase.from("fixed_expenses").insert({
+        user_id: user?.id,
+        name: exp.name,
+        category: exp.category,
+        amount: exp.installment_amount,
+        payment_day: exp.payment_day,
+        payment_day_type: 'fixed',
+        is_active: true,
+        installment_total: exp.installment_total,
+        installment_current: 1,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_, variables: any) => {
+      queryClient.invalidateQueries({ queryKey: ["fixed_expenses", user?.id] });
+      toast.success(`¡Cuota de tarjeta registrada! Aparece en tus Compromisos del mes 💳`);
     },
   });
 
@@ -185,12 +204,13 @@ export default function Gastos() {
         <Plus className="h-6 w-6" />
       </button>
 
-      {/* Main Add/Edit Form - handles conditional logic via initialData param internally */}
+      {/* Main Add/Edit Form */}
       <AddExpenseModal
         open={showAdd || !!editingExpense}
         initialData={editingExpense}
         onClose={() => { setShowAdd(false); setEditingExpense(null) }}
         onSave={(exp) => upsertExpenseMutation.mutate(exp)}
+        onSaveFixed={(exp) => addFixedExpenseMutation.mutate(exp)}
       />
     </div>
   );

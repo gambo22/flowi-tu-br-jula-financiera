@@ -118,13 +118,37 @@ export default function Dashboard() {
     mutationFn: async (expense: any) => {
       const { data, error } = await supabase.from("expenses").insert({
         user_id: user?.id,
-        amount: expense.amount, category: expense.category, date: expense.date, note: expense.note, is_recurring: expense.is_recurring,
+        amount: expense.amount,
+        category: expense.category,
+        date: expense.date,
+        note: expense.note,
+        payment_method: expense.payment_method || 'efectivo',
       });
       if (error) throw error;
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses", user?.id] });
+    },
+  });
+
+  const addFixedExpenseMutation = useMutation({
+    mutationFn: async (exp: any) => {
+      const { error } = await supabase.from("fixed_expenses").insert({
+        user_id: user?.id,
+        name: exp.name,
+        category: exp.category,
+        amount: exp.installment_amount,
+        payment_day: exp.payment_day,
+        payment_day_type: 'fixed',
+        is_active: true,
+        installment_total: exp.installment_total,
+        installment_current: 1,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["fixed_expenses", user?.id] });
     },
   });
 
@@ -289,9 +313,8 @@ export default function Dashboard() {
       <AddExpenseModal
         open={showAddExpense}
         onClose={() => setShowAddExpense(false)}
-        onSave={async (exp) => {
-          await addExpenseMutation.mutateAsync(exp);
-        }}
+        onSave={async (exp) => { await addExpenseMutation.mutateAsync(exp); }}
+        onSaveFixed={(exp) => addFixedExpenseMutation.mutate(exp)}
       />
     </div>
   );

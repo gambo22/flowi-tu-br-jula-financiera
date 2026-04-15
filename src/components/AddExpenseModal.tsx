@@ -1,76 +1,140 @@
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, Banknote, CreditCard, Landmark } from "lucide-react";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
+
+type PaymentMethod = "efectivo" | "debito" | "credito";
+
+interface SaveExpensePayload {
+  id?: string;
+  amount: number;
+  category: string;
+  date: string;
+  note: string;
+  is_recurring: boolean;
+  payment_method: PaymentMethod;
+}
+
+interface SaveFixedPayload {
+  name: string;
+  category: string;
+  installment_amount: number;
+  installment_total: number;
+  payment_day: number;
+}
 
 interface AddExpenseModalProps {
   open: boolean;
   onClose: () => void;
   initialData?: any;
-  onSave: (expense: {
-    id?: string;
-    amount: number;
-    category: string;
-    date: string;
-    note: string;
-    is_recurring: boolean;
-  }) => void;
+  onSave: (expense: SaveExpensePayload) => void;
+  onSaveFixed?: (fixed: SaveFixedPayload) => void;
 }
 
-export default function AddExpenseModal({ open, onClose, initialData, onSave }: AddExpenseModalProps) {
+const PAYMENT_METHODS: { id: PaymentMethod; label: string; icon: React.ElementType }[] = [
+  { id: "efectivo", label: "Efectivo", icon: Banknote },
+  { id: "debito", label: "Débito", icon: Landmark },
+  { id: "credito", label: "Crédito", icon: CreditCard },
+];
+
+export default function AddExpenseModal({
+  open,
+  onClose,
+  initialData,
+  onSave,
+  onSaveFixed,
+}: AddExpenseModalProps) {
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [note, setNote] = useState("");
-  const [isRecurring, setIsRecurring] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("efectivo");
+
+  // Installment (cuotas) fields — only for credit
+  const [isInstallment, setIsInstallment] = useState(false);
+  const [installmentTotal, setInstallmentTotal] = useState("");
+  const [installmentAmount, setInstallmentAmount] = useState("");
+  const [paymentDay, setPaymentDay] = useState("15");
 
   useEffect(() => {
     if (open) {
       if (initialData) {
         setAmount(initialData.amount ? initialData.amount.toString() : "");
         setCategory(initialData.category || "");
-        setDate(initialData.date ? new Date(initialData.date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
+        setDate(
+          initialData.date
+            ? new Date(initialData.date).toISOString().split("T")[0]
+            : new Date().toISOString().split("T")[0]
+        );
         setNote(initialData.note || "");
-        setIsRecurring(!!initialData.is_recurring);
+        setPaymentMethod((initialData.payment_method as PaymentMethod) || "efectivo");
+        setIsInstallment(false);
+        setInstallmentTotal("");
+        setInstallmentAmount("");
+        setPaymentDay("15");
       } else {
         setAmount("");
         setCategory("");
         setDate(new Date().toISOString().split("T")[0]);
         setNote("");
-        setIsRecurring(false);
+        setPaymentMethod("efectivo");
+        setIsInstallment(false);
+        setInstallmentTotal("");
+        setInstallmentAmount("");
+        setPaymentDay("15");
       }
     }
   }, [open, initialData]);
 
   if (!open) return null;
 
+  const isNewCreditInstallment = !initialData && paymentMethod === "credito" && isInstallment;
+  const canSave = amount && category;
+  const canSaveInstallment = amount && category && installmentTotal && installmentAmount && paymentDay;
+
   const handleSave = () => {
-    if (!amount || !category) return;
-    onSave({
-      id: initialData?.id,
-      amount: parseFloat(amount),
-      category,
-      date,
-      note,
-      is_recurring: isRecurring,
-    });
+    if (isNewCreditInstallment) {
+      if (!canSaveInstallment) return;
+      onSaveFixed?.({
+        name: note || EXPENSE_CATEGORIES.find((c) => c.id === category)?.label || "Cuota crédito",
+        category,
+        installment_amount: parseFloat(installmentAmount),
+        installment_total: parseInt(installmentTotal),
+        payment_day: parseInt(paymentDay),
+      });
+    } else {
+      if (!canSave) return;
+      onSave({
+        id: initialData?.id,
+        amount: parseFloat(amount),
+        category,
+        date,
+        note,
+        is_recurring: false,
+        payment_method: paymentMethod,
+      });
+    }
     onClose();
   };
+
+  const totalCompra = parseFloat(installmentTotal) * parseFloat(installmentAmount) || 0;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-foreground/40 backdrop-blur-sm">
       <div className="animate-slide-up w-full max-w-lg rounded-t-2xl sm:rounded-2xl bg-card p-6 max-h-[90vh] overflow-y-auto">
+        {/* Header */}
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-foreground">{initialData ? "Editar gasto" : "Nuevo gasto"}</h2>
+          <h2 className="text-xl font-bold text-foreground">
+            {initialData ? "Editar gasto" : "Nuevo gasto"}
+          </h2>
           <button onClick={onClose} className="rounded-full p-1 hover:bg-muted">
             <X className="h-5 w-5 text-muted-foreground" />
           </button>
         </div>
 
-        {/* Amount */}
+        {/* Monto */}
         <div className="mb-6 text-center">
           <label className="mb-2 block text-sm font-medium text-muted-foreground">Monto</label>
           <div className="flex items-center justify-center gap-1">
@@ -86,7 +150,7 @@ export default function AddExpenseModal({ open, onClose, initialData, onSave }: 
           </div>
         </div>
 
-        {/* Category grid */}
+        {/* Categoría */}
         <div className="mb-5">
           <label className="mb-2 block text-sm font-medium text-muted-foreground">Categoría</label>
           <div className="grid grid-cols-4 gap-2">
@@ -108,26 +172,150 @@ export default function AddExpenseModal({ open, onClose, initialData, onSave }: 
           </div>
         </div>
 
-        {/* Date */}
-        <div className="mb-4">
-          <label className="mb-1 block text-sm font-medium text-muted-foreground">Fecha</label>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        {/* Método de pago */}
+        <div className="mb-5">
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">
+            ¿Cómo pagaste?
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {PAYMENT_METHODS.map((pm) => {
+              const Icon = pm.icon;
+              return (
+                <button
+                  key={pm.id}
+                  onClick={() => {
+                    setPaymentMethod(pm.id);
+                    if (pm.id !== "credito") setIsInstallment(false);
+                  }}
+                  className={cn(
+                    "flex flex-col items-center gap-1.5 rounded-xl py-3 px-2 text-xs font-semibold transition-all border-2",
+                    paymentMethod === pm.id
+                      ? "bg-primary text-primary-foreground border-primary shadow-md"
+                      : "bg-muted text-muted-foreground border-transparent hover:bg-muted/80"
+                  )}
+                >
+                  <Icon className="h-5 w-5" />
+                  {pm.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Note */}
-        <div className="mb-4">
-          <label className="mb-1 block text-sm font-medium text-muted-foreground">Nota (opcional)</label>
-          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ej: Despensa semanal" />
+        {/* Cuotas — solo para crédito en modo nuevo */}
+        {paymentMethod === "credito" && !initialData && (
+          <div className="mb-5 rounded-xl bg-orange-500/10 border border-orange-500/20 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-orange-600 dark:text-orange-400">
+                ¿Es a cuotas?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setIsInstallment(true)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-bold transition-all",
+                    isInstallment ? "bg-orange-500 text-white shadow-sm" : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  Sí
+                </button>
+                <button
+                  onClick={() => setIsInstallment(false)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-bold transition-all",
+                    !isInstallment ? "bg-orange-500 text-white shadow-sm" : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  No
+                </button>
+              </div>
+            </div>
+
+            {isInstallment && (
+              <div className="space-y-3 pt-1">
+                <p className="text-xs text-orange-600/80 dark:text-orange-400/80">
+                  Se agregará a tus <strong>Compromisos Fijos</strong> automáticamente. Aparecerá en Presupuesto cada mes.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Número de cuotas</label>
+                    <Input
+                      type="number"
+                      placeholder="Ej: 12"
+                      value={installmentTotal}
+                      onChange={(e) => setInstallmentTotal(e.target.value)}
+                      className="mt-1"
+                      min={1}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Monto por cuota (Q)</label>
+                    <Input
+                      type="number"
+                      placeholder="Ej: 350"
+                      value={installmentAmount}
+                      onChange={(e) => setInstallmentAmount(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Día de débito cada mes (1–31)
+                  </label>
+                  <Input
+                    type="number"
+                    placeholder="Ej: 15"
+                    value={paymentDay}
+                    onChange={(e) => setPaymentDay(e.target.value)}
+                    className="mt-1"
+                    min={1}
+                    max={31}
+                  />
+                </div>
+                {installmentTotal && installmentAmount && (
+                  <div className="text-xs text-orange-600 dark:text-orange-400 font-semibold bg-orange-500/10 rounded-lg p-2 text-center">
+                    Total de la compra: Q{totalCompra.toFixed(2)} — {installmentTotal} cuotas de Q{installmentAmount}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Fecha — solo para gastos no-cuotas */}
+        {!isNewCreditInstallment && (
+          <div className="mb-4">
+            <label className="mb-1 block text-sm font-medium text-muted-foreground">Fecha</label>
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+        )}
+
+        {/* Nota */}
+        <div className="mb-6">
+          <label className="mb-1 block text-sm font-medium text-muted-foreground">
+            {isNewCreditInstallment ? "Descripción del artículo" : "Nota (opcional)"}
+          </label>
+          <Input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={
+              isNewCreditInstallment ? "Ej: TV Samsung 55 pulgadas" : "Ej: Despensa semanal"
+            }
+          />
         </div>
 
-        {/* Recurring */}
-        <div className="mb-6 flex items-center justify-between rounded-xl bg-muted p-3">
-          <span className="text-sm font-medium text-foreground">¿Es gasto fijo mensual?</span>
-          <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
-        </div>
-
-        <Button onClick={handleSave} className="w-full" size="lg" disabled={!amount || !category}>
-          {initialData ? "Actualizar gasto ✨" : "Guardar gasto ✨"}
+        <Button
+          onClick={handleSave}
+          className="w-full"
+          size="lg"
+          disabled={isNewCreditInstallment ? !canSaveInstallment : !canSave}
+        >
+          {isNewCreditInstallment
+            ? `Agregar ${installmentTotal || "?"} cuotas a Compromisos 💳`
+            : initialData
+            ? "Actualizar gasto ✨"
+            : "Guardar gasto ✨"}
         </Button>
       </div>
     </div>

@@ -83,6 +83,7 @@ export type Database = {
           note: string | null
           date: string
           is_recurring: boolean | null
+          payment_method: string | null
           created_at: string | null
         }
         Insert: {
@@ -93,6 +94,7 @@ export type Database = {
           note?: string | null
           date: string
           is_recurring?: boolean | null
+          payment_method?: string | null
           created_at?: string | null
         }
         Update: {
@@ -103,6 +105,7 @@ export type Database = {
           note?: string | null
           date?: string
           is_recurring?: boolean | null
+          payment_method?: string | null
           created_at?: string | null
         }
       }
@@ -174,6 +177,9 @@ export type Database = {
           payment_day: number
           payment_day_type: string | null
           is_active: boolean | null
+          installment_total: number | null
+          installment_current: number | null
+          installment_note: string | null
           created_at: string | null
         }
         Insert: {
@@ -185,6 +191,9 @@ export type Database = {
           payment_day: number
           payment_day_type?: string | null
           is_active?: boolean | null
+          installment_total?: number | null
+          installment_current?: number | null
+          installment_note?: string | null
           created_at?: string | null
         }
         Update: {
@@ -196,6 +205,9 @@ export type Database = {
           payment_day?: number
           payment_day_type?: string | null
           is_active?: boolean | null
+          installment_total?: number | null
+          installment_current?: number | null
+          installment_note?: string | null
           created_at?: string | null
         }
       }
