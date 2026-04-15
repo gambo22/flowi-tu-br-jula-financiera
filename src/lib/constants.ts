@@ -1,7 +1,7 @@
 import {
   ShoppingCart, Fuel, UtensilsCrossed, Bus, GraduationCap, Home,
   Droplets, HeartPulse, Gamepad2, Tv, Shirt, Plane, Coffee, MoreHorizontal,
-  Car, MapPin, Tablet, Smartphone, ShieldCheck, Star
+  Car, MapPin, Tablet, Smartphone, ShieldCheck, Star, Shield, Wrench
 } from "lucide-react";
 
 export const EXPENSE_CATEGORIES = [
@@ -18,6 +18,8 @@ export const EXPENSE_CATEGORIES = [
   { id: "ropa", label: "Ropa", icon: Shirt },
   { id: "viajes", label: "Viajes", icon: Plane },
   { id: "hormiga", label: "Gastos hormiga", icon: Coffee },
+  { id: "seguros", label: "Seguros", icon: Shield },
+  { id: "mantenimiento", label: "Mantenimiento", icon: Wrench },
   { id: "otros", label: "Otros", icon: MoreHorizontal },
 ] as const;
 

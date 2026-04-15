@@ -188,9 +188,22 @@ export default function Dashboard() {
 
   const getPaymentBadge = () => {
     if (!paymentText) return null;
-    if (paymentDaysUntil === 0) return { text: "¡Hoy cae la quincena, bicho! 💸🎉", color: "bg-green-500/20 text-green-400 border-green-500/30" };
-    if (paymentDaysUntil === 1) return { text: "¡Mañana cae el pago, aguantá un día más! 💪", color: "bg-accent/20 text-accent border-accent/30" };
-    if (paymentDaysUntil <= 3) return { text: `En ${paymentDaysUntil} días cae el pago 🗓️`, color: "bg-accent/15 text-accent border-accent/20" };
+    if (paymentDaysUntil === 0) return {
+      text: "¡Hoy es día de pago, bicho! 💸🎉 ¡A darle con todo!",
+      color: "bg-green-500/20 text-green-400 border-green-500/30 animate-pulse"
+    };
+    if (paymentDaysUntil === 1) return {
+      text: "¡Mañana cae el pago! Aguantá un día más 💪",
+      color: "bg-accent/20 text-accent border-accent/30"
+    };
+    if (paymentDaysUntil === 2) return {
+      text: "En 2 días cae el pago, ya merito 🗓️",
+      color: "bg-accent/15 text-accent border-accent/20"
+    };
+    if (paymentDaysUntil === 3) return {
+      text: "En 3 días cae el pago 🗓️",
+      color: "bg-accent/15 text-accent border-accent/20"
+    };
     return null;
   };
   const paymentBadge = getPaymentBadge();
@@ -232,16 +245,16 @@ export default function Dashboard() {
             </div>
             <div className="flex justify-between">
               <span className="opacity-75">Compromisos fijos</span>
-              <span className="text-red-300">- {formatQ(totalSpentFixed)}</span>
+              <span className="text-red-200 font-bold">- {formatQ(totalSpentFixed)}</span>
             </div>
             <div className="flex justify-between">
               <span className="opacity-75">Gastado variable</span>
-              <span className="text-red-300">- {formatQ(totalSpentVariable)}</span>
+              <span className="text-red-200 font-bold">- {formatQ(totalSpentVariable)}</span>
             </div>
             {totalDebtPayments > 0 && (
               <div className="flex justify-between">
                 <span className="opacity-75">Pagos de deudas</span>
-                <span className="text-red-300">- {formatQ(totalDebtPayments)}</span>
+                <span className="text-red-200 font-bold">- {formatQ(totalDebtPayments)}</span>
               </div>
             )}
             <div className="h-px w-full bg-white/20 my-1" />

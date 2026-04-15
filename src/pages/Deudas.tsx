@@ -392,6 +392,10 @@ function DebtModal({ onClose, onSave, initial, isSaving }: {
   const [rate, setRate] = useState(initial?.interest_rate?.toString() || "");
   const [minPayment, setMinPayment] = useState(initial?.minimum_payment?.toString() || "");
   const [paymentDay, setPaymentDay] = useState(initial?.payment_day?.toString() || "");
+  const [startMonth, setStartMonth] = useState(initial?.start_month?.toString() || new Date().getMonth().toString());
+  const [startYear, setStartYear] = useState(initial?.start_year?.toString() || new Date().getFullYear().toString());
+  const [totalInstallments, setTotalInstallments] = useState(initial?.total_installments?.toString() || "");
+  const [monthsPaid, setMonthsPaid] = useState(initial?.months_paid?.toString() || "");
 
   const DEBT_TYPE_OPTIONS = [
     "Tarjeta de crédito",
@@ -401,45 +405,100 @@ function DebtModal({ onClose, onSave, initial, isSaving }: {
     "Hipoteca",
   ];
 
+  const currentMonth = parseInt(startMonth) || 1;
+  const currentYear = parseInt(startYear) || new Date().getFullYear();
+  const paid = parseInt(monthsPaid) || 0;
+  const total = parseInt(totalInstallments) || 0;
+  const halfPoint = Math.ceil(total / 2);
+  const isBeforeHalf = paid < halfPoint;
+
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-foreground/40 backdrop-blur-sm">
       <div className="animate-slide-up w-full max-w-lg rounded-t-2xl sm:rounded-2xl bg-card p-6 max-h-[90vh] overflow-y-auto">
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-xl font-bold text-foreground">{initial ? "Editar deuda" : "Nueva deuda"}</h2>
-          <button onClick={onClose} className="rounded-full p-1 hover:bg-muted">
-            <X className="h-5 w-5 text-muted-foreground" />
-          </button>
+          <button onClick={onClose} className="rounded-full p-1 hover:bg-muted"><X className="h-5 w-5 text-muted-foreground" /></button>
         </div>
         <div className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-muted-foreground">Nombre</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Visa BAM" />
           </div>
+
           <div>
             <label className="mb-1 block text-sm font-medium text-muted-foreground">Tipo</label>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
-              <SelectContent>
-                {DEBT_TYPE_OPTIONS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              className="w-full rounded-xl bg-background border border-border py-3 px-4 text-foreground focus:border-primary outline-none text-sm"
+            >
+              <option value="">Seleccionar tipo</option>
+              {DEBT_TYPE_OPTIONS.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
           </div>
+
           <div>
             <label className="mb-1 block text-sm font-medium text-muted-foreground">Saldo actual (Q)</label>
             <Input type="number" value={balance} onChange={(e) => setBalance(e.target.value)} />
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-muted-foreground">Tasa de interés anual (%)</label>
-            <Input type="number" value={rate} onChange={(e) => setRate(e.target.value)} />
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-muted-foreground">Tasa anual (%)</label>
+              <Input type="number" value={rate} onChange={(e) => setRate(e.target.value)} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-muted-foreground">Pago mínimo (Q/mes)</label>
+              <Input type="number" value={minPayment} onChange={(e) => setMinPayment(e.target.value)} />
+            </div>
           </div>
+
           <div>
-            <label className="mb-1 block text-sm font-medium text-muted-foreground">Pago mínimo mensual (Q)</label>
-            <Input type="number" value={minPayment} onChange={(e) => setMinPayment(e.target.value)} />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-muted-foreground">Día de pago/corte</label>
+            <label className="mb-1 block text-sm font-medium text-muted-foreground">Día de pago (1–31)</label>
             <Input type="number" value={paymentDay} onChange={(e) => setPaymentDay(e.target.value)} placeholder="15" />
           </div>
+
+          <div className="rounded-xl bg-muted/40 p-3 space-y-3">
+            <p className="text-xs font-bold text-muted-foreground uppercase">Cuotas / Plazo</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Total de cuotas</label>
+                <Input type="number" value={totalInstallments} onChange={(e) => setTotalInstallments(e.target.value)} placeholder="Ej: 60" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Cuotas ya pagadas</label>
+                <Input type="number" value={monthsPaid} onChange={(e) => setMonthsPaid(e.target.value)} placeholder="Ej: 12" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Mes de inicio</label>
+                <select value={startMonth} onChange={(e) => setStartMonth(e.target.value)}
+                  className="w-full rounded-xl bg-background border border-border py-2.5 px-3 text-sm text-foreground outline-none">
+                  {["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"].map((m, i) => (
+                    <option key={i} value={i + 1}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Año de inicio</label>
+                <Input type="number" value={startYear} onChange={(e) => setStartYear(e.target.value)} placeholder="2023" />
+              </div>
+            </div>
+
+            {total > 0 && paid > 0 && (
+              <div className={cn(
+                "rounded-lg p-2 text-xs text-center font-semibold",
+                isBeforeHalf ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+              )}>
+                Cuota {paid} de {total} · {isBeforeHalf ? "⚡ Primera mitad — pagos extra ahorran mucho en intereses" : "📅 Segunda mitad — pagos extra reducen tiempo"}
+              </div>
+            )}
+          </div>
+
           <Button
             onClick={() => onSave({
               name, type,
@@ -447,13 +506,17 @@ function DebtModal({ onClose, onSave, initial, isSaving }: {
               interest_rate: parseFloat(rate) || 0,
               minimum_payment: parseFloat(minPayment) || 0,
               payment_day: parseInt(paymentDay) || 1,
+              total_installments: parseInt(totalInstallments) || 0,
+              months_paid: parseInt(monthsPaid) || 0,
+              start_month: parseInt(startMonth) || 1,
+              start_year: parseInt(startYear) || new Date().getFullYear(),
             })}
             className="w-full" size="lg"
             disabled={!name || !type || !balance || isSaving}
           >
-            {isSaving ? (
-              <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-            ) : initial ? "Guardar cambios" : "Guardar deuda"}
+            {isSaving
+              ? <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              : initial ? "Guardar cambios" : "Guardar deuda"}
           </Button>
         </div>
       </div>
