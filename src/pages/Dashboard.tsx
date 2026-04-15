@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Plus, TrendingUp, Lightbulb, Landmark, CreditCard, Banknote } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -7,9 +7,12 @@ import AddExpenseModal from "@/components/AddExpenseModal";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { calculatePaymentDate, getPaymentDistanceText } from "@/lib/dateUtils";
+import { getFlowiInsights, type FlowiInsight } from "@/lib/aiAdvisor";
 
 export default function Dashboard() {
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [aiInsights, setAiInsights] = useState<FlowiInsight[]>([]);
+  const [insightsLoading, setInsightsLoading] = useState(true);
   const { profile, user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -52,11 +55,17 @@ export default function Dashboard() {
   const { data: goals = [] } = useQuery({
     queryKey: ["goals", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("goals")
-        .select("*")
-        .eq("user_id", user?.id)
-        .order("priority", { ascending: true });
+      const { data, error } = await supabase.from("goals").select("*").eq("user_id", user?.id).order("priority", { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  const { data: debts = [] } = useQuery({
+    queryKey: ["debts", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("debts").select("*").eq("user_id", user?.id);
       if (error) throw error;
       return data || [];
     },
@@ -151,6 +160,24 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ["fixed_expenses", user?.id] });
     },
   });
+
+  // AI Insights — load once per session (6h cache)
+  useEffect(() => {
+    if (!profile?.id || !expenses.length) { setInsightsLoading(false); return; }
+    const today2 = new Date();
+    const thisMonthExp = expenses.filter((e: any) => {
+      const d = new Date(e.date);
+      return d.getMonth() === today2.getMonth() && d.getFullYear() === today2.getFullYear();
+    });
+    const lastMonth = new Date(today2.getFullYear(), today2.getMonth() - 1, 1);
+    const lastMonthExp = expenses.filter((e: any) => {
+      const d = new Date(e.date);
+      return d.getMonth() === lastMonth.getMonth() && d.getFullYear() === lastMonth.getFullYear();
+    });
+    getFlowiInsights({ user: profile, thisMonthExpenses: thisMonthExp, lastMonthExpenses: lastMonthExp, fixedExpenses, goals, debts })
+      .then(res => { setAiInsights(res); setInsightsLoading(false); })
+      .catch(() => setInsightsLoading(false));
+  }, [profile?.id, expenses.length]);
 
   // Payday Logic
   let paymentText = "";
@@ -293,7 +320,39 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Insight */}
+      {/* Flowi dice — IA */}
+      {(insightsLoading || aiInsights.length > 0) && (
+        <div className="rounded-2xl bg-card border border-border p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Lightbulb className="h-4 w-4 text-accent" />
+            <span className="text-xs font-bold text-accent">Flowi dice</span>
+            <span className="text-xs text-muted-foreground opacity-60">· IA</span>
+          </div>
+          {insightsLoading ? (
+            <div className="space-y-2">
+              <div className="h-14 rounded-xl bg-muted/50 animate-pulse" />
+              <div className="h-14 rounded-xl bg-muted/40 animate-pulse" />
+            </div>
+          ) : (
+            <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+              {aiInsights.map((ins, i) => (
+                <div key={i} className={`flex-shrink-0 w-68 rounded-xl p-3 border ${
+                  ins.type === 'urgent' ? 'bg-destructive/10 border-destructive/20 text-destructive' :
+                  ins.type === 'warning' ? 'bg-warning/10 border-warning/20 text-warning' :
+                  ins.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-600' :
+                  'bg-accent/10 border-accent/20 text-accent'
+                }`}>
+                  <p className="text-xs font-bold mb-1">{ins.title}</p>
+                  <p className="text-xs leading-relaxed opacity-90">{ins.message}</p>
+                  {ins.action && <p className="text-xs font-semibold mt-1.5 opacity-75">👉 {ins.action}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Reflexión del día */}
       <div className="rounded-2xl bg-accent/10 p-4">
         <div className="mb-1 flex items-center gap-2">
           <Lightbulb className="h-4 w-4 text-accent" />

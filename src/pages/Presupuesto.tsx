@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { EXPENSE_CATEGORIES, formatQ } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { Edit2, X, Plus, AlertCircle, Settings, Trash2, CheckCircle, Clock, AlertTriangle } from "lucide-react";
+import { Edit2, X, Plus, AlertCircle, Settings, Trash2, CheckCircle, Clock, AlertTriangle, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,8 +14,24 @@ export default function Presupuesto() {
   const { profile, user, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
   const [editingCat, setEditingCat] = useState<string | null>(null);
+  const [lockingCat, setLockingCat] = useState<string | null>(null);
   const [addingLimit, setAddingLimit] = useState(false);
   const [editingIncome, setEditingIncome] = useState(false);
+
+  const isLocked = (limitRow: any) => {
+    if (!limitRow?.locked_until) return false;
+    return new Date(limitRow.locked_until) > new Date();
+  };
+
+  const handleEditCategory = (catId: string) => {
+    const limitRow = budgetLimits.find(bl => bl.category === catId);
+    if (isLocked(limitRow)) {
+      const until = new Date(limitRow.locked_until).toLocaleDateString('es-GT', { day: 'numeric', month: 'long' });
+      toast.error(`🔒 Categoría bloqueada hasta el ${until}`);
+      return;
+    }
+    setEditingCat(catId);
+  };
 
   const { data: expenses = [] } = useQuery({
     queryKey: ["expenses", user?.id],
@@ -161,6 +177,20 @@ export default function Presupuesto() {
     },
   });
 
+  const lockCategoryMutation = useMutation({
+    mutationFn: async ({ category, lockedUntil }: { category: string; lockedUntil: string }) => {
+      const existing = budgetLimits.find(b => b.category === category);
+      if (!existing) { toast.error('Primero agrega un tope a esta categoría.'); return; }
+      const { error } = await supabase.from("budget_limits").update({ locked_until: lockedUntil }).eq("id", existing.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["budgetLimits", user?.id] });
+      toast.success("Categoría bloqueada 🔒");
+      setLockingCat(null);
+    },
+  });
+
   const monthlyIncome = profile?.monthly_income || 0;
   const hasIncomeConfigured = monthlyIncome > 0;
 
@@ -180,14 +210,24 @@ export default function Presupuesto() {
     currentMonthExpenses.forEach((e) => {
       map[e.category] = (map[e.category] || 0) + (e.amount || 0);
     });
+    // Include active installment cuotas (credit card monthly payments)
+    fixedExpenses
+      .filter(f => f.is_active && (f.installment_total || 0) > 0)
+      .forEach(f => {
+        map[f.category] = (map[f.category] || 0) + (f.amount || 0);
+      });
     return map;
-  }, [currentMonthExpenses]);
+  }, [currentMonthExpenses, fixedExpenses]);
 
-  // Active limits mixed with categories where money has been spent
+  const installmentCats = new Set(
+    fixedExpenses.filter(f => f.is_active && (f.installment_total || 0) > 0).map(f => f.category)
+  );
+
   const displayCategories = EXPENSE_CATEGORIES.filter(cat => {
     const hasLimit = budgetLimits.some(bl => bl.category === cat.id);
     const hasSpent = (spentByCategory[cat.id] || 0) > 0;
-    return hasLimit || hasSpent;
+    const hasInstallment = installmentCats.has(cat.id);
+    return hasLimit || hasSpent || hasInstallment;
   });
 
   return (
@@ -318,11 +358,13 @@ export default function Presupuesto() {
             const spent = spentByCategory[cat.id] || 0;
             const pct = monthlyLimit > 0 ? Math.round((spent / monthlyLimit) * 100) : 0;
             const barColor = pct > 90 ? "bg-destructive" : pct > 70 ? "bg-warning" : "bg-primary";
+            const locked = isLocked(limitRow);
+            const lockedUntil = locked ? new Date(limitRow.locked_until).toLocaleDateString('es-GT', { day: 'numeric', month: 'short' }) : null;
 
             return (
-              <button 
-                key={cat.id} 
-                onClick={() => setEditingCat(cat.id)}
+              <button
+                key={cat.id}
+                onClick={() => handleEditCategory(cat.id)}
                 className="w-full text-left rounded-xl bg-card p-4 border border-border hover:shadow-md transition-all active:scale-[0.98]"
               >
                 <div className="mb-2 flex items-center gap-3">
@@ -332,26 +374,34 @@ export default function Presupuesto() {
                   <div className="flex-1">
                     <p className="text-sm font-medium text-foreground">{cat.label}</p>
                     <p className="text-xs text-muted-foreground">
-                      {formatQ(spent)} de {monthlyLimit > 0 ? formatQ(monthlyLimit) : "Ilimitado / Sin tope"}
+                      {formatQ(spent)} de {monthlyLimit > 0 ? formatQ(monthlyLimit) : "Sin tope"}
                     </p>
                   </div>
+                  {locked && (
+                    <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-orange-500/10 text-orange-500 text-xs font-semibold">
+                      <Lock className="h-3 w-3" />
+                      <span>hasta {lockedUntil}</span>
+                    </div>
+                  )}
+                  {!locked && limitRow?.id && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setLockingCat(cat.id); }}
+                      className="p-1.5 text-muted-foreground hover:bg-orange-500/10 hover:text-orange-500 rounded-lg transition-colors"
+                      title="Bloquear categoría"
+                    >
+                      <Lock className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   {limitRow?.id && (
-                     <button
-                        onClick={(e) => {
-                           e.stopPropagation();
-                           if (window.confirm(`¿Eliminar límite de ${cat.label}?`)) {
-                              deleteLimitMutation.mutate(limitRow.id);
-                           }
-                        }}
-                        className="p-2 mr-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors"
-                     >
-                        <Trash2 className="h-4 w-4" />
-                     </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); if (window.confirm(`¿Eliminar límite de ${cat.label}?`)) deleteLimitMutation.mutate(limitRow.id); }}
+                      className="p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   )}
                   {monthlyLimit > 0 && (
-                    <span className={cn("text-sm font-bold", pct > 90 ? "text-destructive" : pct > 70 ? "text-warning" : "text-primary")}>
-                      {pct}%
-                    </span>
+                    <span className={cn("text-sm font-bold", pct > 90 ? "text-destructive" : pct > 70 ? "text-warning" : "text-primary")}>{pct}%</span>
                   )}
                 </div>
                 {monthlyLimit > 0 ? (
@@ -362,9 +412,10 @@ export default function Presupuesto() {
                   <div className="h-2 rounded-full bg-muted/40 border border-dashed border-border" />
                 )}
                 {pct > 80 && monthlyLimit > 0 && (
-                  <p className="mt-2 text-xs text-warning">
-                    ⚠️ Ya llevas el {pct}% en {cat.label.toLowerCase()} este mes
-                  </p>
+                  <p className="mt-2 text-xs text-warning">⚠️ Ya llevas el {pct}% en {cat.label.toLowerCase()} este mes</p>
+                )}
+                {installmentCats.has(cat.id) && (
+                  <p className="mt-1 text-xs text-orange-500">💳 Incluye cuota mensual de tarjeta</p>
                 )}
               </button>
             );
@@ -383,12 +434,24 @@ export default function Presupuesto() {
         Agregar nueva categoría a vigilar
       </Button>
 
+      {lockingCat && (
+        <LockCategoryModal
+          categoryLabel={EXPENSE_CATEGORIES.find(c => c.id === lockingCat)?.label || lockingCat}
+          onClose={() => setLockingCat(null)}
+          onSave={(days) => {
+            const until = new Date();
+            until.setDate(until.getDate() + days);
+            lockCategoryMutation.mutate({ category: lockingCat!, lockedUntil: until.toISOString() });
+          }}
+        />
+      )}
+
       {/* Income Modal */}
       {editingIncome && (
-        <EditIncomeModal 
-          initial={monthlyIncome} 
-          onClose={() => setEditingIncome(false)} 
-          onSave={(val) => updateIncomeMutation.mutate(val)} 
+        <EditIncomeModal
+          initial={monthlyIncome}
+          onClose={() => setEditingIncome(false)}
+          onSave={(val) => updateIncomeMutation.mutate(val)}
         />
       )}
 
@@ -534,6 +597,36 @@ function AddCategoryLimitModal({ configuredCats, onClose, onSave }: { configured
           </div>
         </div>
         <Button className="w-full" onClick={() => onSave(selectedCat, parseFloat(limit) || 0)} disabled={!limit || !selectedCat}>Confirmar Límite</Button>
+      </div>
+    </div>
+  );
+}
+
+function LockCategoryModal({ categoryLabel, onClose, onSave }: { categoryLabel: string; onClose: () => void; onSave: (days: number) => void }) {
+  const [days, setDays] = useState(30);
+  const until = new Date();
+  until.setDate(until.getDate() + days);
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
+      <div className="animate-fade-in w-full max-w-sm rounded-2xl bg-card p-6 border border-border shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-foreground flex items-center gap-2"><Lock className="h-5 w-5 text-orange-500" /> Bloquear categoría</h2>
+          <button onClick={onClose} className="rounded-full p-1 hover:bg-muted"><X className="h-5 w-5 text-muted-foreground" /></button>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">Bloquea <strong>{categoryLabel}</strong> para no poder modificar el límite durante un tiempo.</p>
+        <div className="grid grid-cols-3 gap-2 mb-6">
+          {[30, 60, 90].map(d => (
+            <button
+              key={d}
+              onClick={() => setDays(d)}
+              className={`py-3 rounded-xl text-sm font-bold transition-all border-2 ${days === d ? 'bg-orange-500 text-white border-orange-500' : 'bg-muted text-muted-foreground border-transparent'}`}
+            >
+              {d} días
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground text-center mb-4">Bloqueada hasta el {until.toLocaleDateString('es-GT', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+        <Button className="w-full bg-orange-500 hover:bg-orange-600" onClick={() => onSave(days)}>🔒 Confirmar bloqueo</Button>
       </div>
     </div>
   );

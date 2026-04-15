@@ -115,6 +115,7 @@ export type Database = {
           user_id: string
           category: string
           monthly_limit: number
+          locked_until: string | null
           created_at: string | null
         }
         Insert: {
@@ -122,6 +123,7 @@ export type Database = {
           user_id: string
           category: string
           monthly_limit: number
+          locked_until?: string | null
           created_at?: string | null
         }
         Update: {
@@ -129,6 +131,7 @@ export type Database = {
           user_id?: string
           category?: string
           monthly_limit?: number
+          locked_until?: string | null
           created_at?: string | null
         }
       }
@@ -139,9 +142,17 @@ export type Database = {
           name: string
           type: string | null
           total_amount: number
+          down_payment: number | null
           current_saved: number | null
+          saved_amount: number | null
           monthly_payment: number | null
           priority: number | null
+          installment_total: number | null
+          installment_current: number | null
+          payment_day: number | null
+          payment_method: string | null
+          phase: string | null
+          fixed_expense_id: string | null
           created_at: string | null
         }
         Insert: {
@@ -149,10 +160,18 @@ export type Database = {
           user_id: string
           name: string
           type?: string | null
-          total_amount: number
+          total_amount?: number
+          down_payment?: number | null
           current_saved?: number | null
+          saved_amount?: number | null
           monthly_payment?: number | null
           priority?: number | null
+          installment_total?: number | null
+          installment_current?: number | null
+          payment_day?: number | null
+          payment_method?: string | null
+          phase?: string | null
+          fixed_expense_id?: string | null
           created_at?: string | null
         }
         Update: {
@@ -161,9 +180,17 @@ export type Database = {
           name?: string
           type?: string | null
           total_amount?: number
+          down_payment?: number | null
           current_saved?: number | null
+          saved_amount?: number | null
           monthly_payment?: number | null
           priority?: number | null
+          installment_total?: number | null
+          installment_current?: number | null
+          payment_day?: number | null
+          payment_method?: string | null
+          phase?: string | null
+          fixed_expense_id?: string | null
           created_at?: string | null
         }
       }
@@ -180,6 +207,7 @@ export type Database = {
           installment_total: number | null
           installment_current: number | null
           installment_note: string | null
+          goal_id: string | null
           created_at: string | null
         }
         Insert: {
@@ -194,6 +222,7 @@ export type Database = {
           installment_total?: number | null
           installment_current?: number | null
           installment_note?: string | null
+          goal_id?: string | null
           created_at?: string | null
         }
         Update: {
@@ -208,7 +237,31 @@ export type Database = {
           installment_total?: number | null
           installment_current?: number | null
           installment_note?: string | null
+          goal_id?: string | null
           created_at?: string | null
+        }
+      }
+      goal_payments: {
+        Row: {
+          id: string
+          goal_id: string
+          user_id: string
+          amount: number
+          paid_at: string | null
+        }
+        Insert: {
+          id?: string
+          goal_id: string
+          user_id: string
+          amount: number
+          paid_at?: string | null
+        }
+        Update: {
+          id?: string
+          goal_id?: string
+          user_id?: string
+          amount?: number
+          paid_at?: string | null
         }
       }
       fixed_expense_payments: {

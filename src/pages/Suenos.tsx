@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Plus, TrendingUp, ArrowUp, ArrowDown, Wallet, X } from "lucide-react";
+import { Plus, TrendingUp, ArrowUp, ArrowDown, Wallet, X, Edit2, Trash2, CheckCircle } from "lucide-react";
 import { GOAL_TYPES, formatQ } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -14,16 +14,14 @@ export default function Suenos() {
   const { profile, user } = useAuth();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  const [addingToGoal, setAddingToGoal] = useState<any>(null); // For "Abonar" modal
+  const [addingToGoal, setAddingToGoal] = useState<any>(null);
+  const [editingGoal, setEditingGoal] = useState<any>(null);
+  const [confirmDelete, setConfirmDelete] = useState<any>(null);
 
   const { data: goals = [] } = useQuery({
     queryKey: ["goals", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("goals")
-        .select("*")
-        .eq("user_id", user?.id)
-        .order("priority", { ascending: true });
+      const { data, error } = await supabase.from("goals").select("*").eq("user_id", user?.id).order("priority", { ascending: true });
       if (error) throw error;
       return data || [];
     },
@@ -33,10 +31,7 @@ export default function Suenos() {
   const { data: expenses = [] } = useQuery({
     queryKey: ["expenses", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("expenses")
-        .select("*")
-        .eq("user_id", user?.id);
+      const { data, error } = await supabase.from("expenses").select("*").eq("user_id", user?.id);
       if (error) throw error;
       return data || [];
     },
@@ -46,82 +41,212 @@ export default function Suenos() {
   const { data: debts = [] } = useQuery({
     queryKey: ["debts", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("debts")
-        .select("*")
-        .eq("user_id", user?.id);
+      const { data, error } = await supabase.from("debts").select("*").eq("user_id", user?.id);
       if (error) throw error;
       return data || [];
     },
     enabled: !!user?.id,
   });
 
+  const monthlyIncome = profile?.monthly_income || 0;
+
+  // BLOQUE 4 — Capacidad de ahorro real (promedio 3 meses)
+  const { savingsCapacity, dataMonthsCount } = useMemo(() => {
+    const today = new Date();
+    const threeMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+    const recentExpenses = expenses.filter(e => new Date(e.date) >= threeMonthsAgo);
+    if (recentExpenses.length === 0) {
+      return { savingsCapacity: Math.max(monthlyIncome * 0.2, 0), dataMonthsCount: 0 };
+    }
+    const monthMap: Record<string, number> = {};
+    recentExpenses.forEach(e => {
+      const d = new Date(e.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`;
+      monthMap[key] = (monthMap[key] || 0) + (e.amount || 0);
+    });
+    const values = Object.values(monthMap);
+    const avgSpent = values.reduce((s, v) => s + v, 0) / values.length;
+    const debtPayments = debts.reduce((s: number, d: any) => s + (d.minimum_payment || 0), 0);
+    return { savingsCapacity: Math.max(monthlyIncome - avgSpent - debtPayments, 0), dataMonthsCount: values.length };
+  }, [expenses, monthlyIncome, debts]);
+
+  // Mutations
   const addGoalMutation = useMutation({
     mutationFn: async (goal: any) => {
-      const { data, error } = await supabase.from("goals").insert({
+      const startPhase = !goal.down_payment && goal.monthly_payment > 0 ? 'installments' : 'saving';
+      const { data: newGoal, error } = await supabase.from("goals").insert({
         user_id: user?.id,
         name: goal.name,
         type: goal.type,
-        total_amount: goal.total_amount,
+        total_amount: goal.total_amount || 0,
+        down_payment: goal.down_payment || 0,
+        monthly_payment: goal.monthly_payment || 0,
+        installment_total: goal.installment_total || 0,
+        payment_day: goal.payment_day || null,
         priority: goals.length + 1,
         current_saved: 0,
-      });
+        installment_current: 0,
+        phase: startPhase,
+      }).select().single();
       if (error) throw error;
-      return data;
+      if (startPhase === 'installments' && goal.monthly_payment > 0 && newGoal) {
+        const { data: fe } = await supabase.from("fixed_expenses").insert({
+          user_id: user?.id,
+          name: `Cuotas: ${goal.name}`,
+          category: goal.type || 'other',
+          amount: goal.monthly_payment,
+          payment_day: goal.payment_day || 1,
+          payment_day_type: 'fixed',
+          is_active: true,
+          installment_total: goal.installment_total || 0,
+          installment_current: 0,
+          goal_id: newGoal.id,
+        }).select().single();
+        if (fe?.id) {
+          await supabase.from("goals").update({ fixed_expense_id: fe.id }).eq("id", newGoal.id);
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["goals", user?.id] });
-      toast.success("¡Meta creada con éxito!");
+      queryClient.invalidateQueries({ queryKey: ["fixed_expenses", user?.id] });
+      toast.success("¡Sueño creado! 🌟");
       setShowForm(false);
     },
   });
 
-  const depositGoalMutation = useMutation({
-    mutationFn: async ({ id, amount, current }: { id: string; amount: number; current: number }) => {
-      const newSaved = current + amount;
-      const { error } = await supabase.from("goals").update({ current_saved: newSaved }).eq("id", id);
+  const updateGoalMutation = useMutation({
+    mutationFn: async (goal: any) => {
+      const { error } = await supabase.from("goals").update({
+        name: goal.name,
+        type: goal.type,
+        total_amount: goal.total_amount || 0,
+        down_payment: goal.down_payment || 0,
+        monthly_payment: goal.monthly_payment || 0,
+        installment_total: goal.installment_total || 0,
+        payment_day: goal.payment_day || null,
+      }).eq("id", goal.id);
       if (error) throw error;
-      return newSaved;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["goals", user?.id] });
-      toast.success("¡Abono registrado! Estás más cerca.");
+      toast.success("Sueño actualizado.");
+      setEditingGoal(null);
+    },
+  });
+
+  const deleteGoalMutation = useMutation({
+    mutationFn: async ({ goalId, fixedExpenseId }: { goalId: string; fixedExpenseId?: string }) => {
+      if (fixedExpenseId) {
+        await supabase.from("fixed_expenses").update({ is_active: false }).eq("id", fixedExpenseId);
+      }
+      const { error } = await supabase.from("goals").delete().eq("id", goalId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["goals", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["fixed_expenses", user?.id] });
+      toast.success("Sueño eliminado.");
+      setConfirmDelete(null);
+    },
+  });
+
+  const depositGoalMutation = useMutation({
+    mutationFn: async ({ goal, amount }: { goal: any; amount: number }) => {
+      const newSaved = (goal.current_saved || 0) + amount;
+      await supabase.from("goals").update({ current_saved: newSaved }).eq("id", goal.id);
+      try {
+        await (supabase.from as any)("goal_payments").insert({ goal_id: goal.id, user_id: user?.id, amount });
+      } catch { /* table may not exist yet */ }
+      // Auto-transition: saving → installments
+      const downPayment = goal.down_payment || 0;
+      const installmentTotal = goal.installment_total || 0;
+      const currentPhase = goal.phase || 'saving';
+      if (downPayment > 0 && newSaved >= downPayment && installmentTotal > 0 && currentPhase === 'saving') {
+        const { data: fe } = await supabase.from("fixed_expenses").insert({
+          user_id: user?.id,
+          name: `Cuotas: ${goal.name}`,
+          category: goal.type || 'other',
+          amount: goal.monthly_payment || 0,
+          payment_day: goal.payment_day || 1,
+          payment_day_type: 'fixed',
+          is_active: true,
+          installment_total: installmentTotal,
+          installment_current: 0,
+          goal_id: goal.id,
+        }).select().single();
+        await supabase.from("goals").update({
+          phase: 'installments',
+          installment_current: 0,
+          fixed_expense_id: (fe as any)?.id || null,
+        }).eq("id", goal.id);
+        return { transitioned: true, name: goal.name };
+      }
+      return { transitioned: false };
+    },
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ["goals", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["fixed_expenses", user?.id] });
+      if (result?.transitioned) {
+        toast.success(`🎉 ¡Enganche listo! Las cuotas de "${result.name}" ya están en tus compromisos.`);
+      } else {
+        toast.success("¡Abono registrado! Seguís avanzando 💪");
+      }
       setAddingToGoal(null);
+    },
+  });
+
+  const payInstallmentMutation = useMutation({
+    mutationFn: async (goal: any) => {
+      const today = new Date();
+      const newCurrent = (goal.installment_current || 0) + 1;
+      const isComplete = newCurrent >= (goal.installment_total || 1);
+      if (goal.fixed_expense_id) {
+        await supabase.from("fixed_expense_payments").insert({
+          fixed_expense_id: goal.fixed_expense_id,
+          user_id: user?.id,
+          amount_paid: goal.monthly_payment || 0,
+          payment_date: today.toISOString().split('T')[0],
+          month: today.getMonth() + 1,
+          year: today.getFullYear(),
+          confirmed: true,
+        });
+        await supabase.from("fixed_expenses").update({ installment_current: newCurrent, is_active: !isComplete }).eq("id", goal.fixed_expense_id);
+      }
+      await supabase.from("goals").update({ installment_current: newCurrent, phase: isComplete ? 'completed' : 'installments' }).eq("id", goal.id);
+      return { newCurrent, total: goal.installment_total || 1, isComplete };
+    },
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ["goals", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["fixed_expenses", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["fixed_payments", user?.id] });
+      if (result.isComplete) {
+        toast.success("🏆 ¡Sueño completado! Todas las cuotas pagadas. ¡Felicidades!");
+      } else {
+        const pct = Math.round((result.newCurrent / result.total) * 100);
+        if (pct >= 75) toast.success(`✨ Cuota ${result.newCurrent}/${result.total} · ¡Ya vas al ${pct}%!`);
+        else if (pct >= 50) toast.success(`💪 Cuota ${result.newCurrent}/${result.total} · ¡Mitad del camino!`);
+        else toast.success(`✓ Cuota ${result.newCurrent} de ${result.total} pagada.`);
+      }
     },
   });
 
   const reorderGoalMutation = useMutation({
     mutationFn: async (updatedGoals: any[]) => {
-      const updates = updatedGoals.map((g, index) => ({
-        id: g.id,
-        priority: index + 1,
-      }));
-      await Promise.all(
-        updates.map((u) => supabase.from("goals").update({ priority: u.priority }).eq("id", u.id))
-      );
+      await Promise.all(updatedGoals.map((g, i) => supabase.from("goals").update({ priority: i + 1 }).eq("id", g.id)));
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["goals", user?.id] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["goals", user?.id] }),
   });
-
-  const monthlyIncome = profile?.monthly_income || 0;
-  const fixedExpenses = useMemo(() => expenses.filter((e) => e.is_recurring).reduce((s, e) => s + (e.amount || 0), 0), [expenses]);
-  const variableExpenses = useMemo(() => expenses.filter((e) => !e.is_recurring).reduce((s, e) => s + (e.amount || 0), 0), [expenses]);
-  const debtPayments = useMemo(() => debts.reduce((s, d) => s + (d.minimum_payment || 0), 0), [debts]);
-  const savingsCapacity = monthlyIncome - fixedExpenses - variableExpenses - debtPayments;
 
   const handleReorder = (index: number, direction: 'up' | 'down') => {
     const newGoals = [...goals];
     if (direction === 'up' && index > 0) {
       [newGoals[index - 1], newGoals[index]] = [newGoals[index], newGoals[index - 1]];
-      queryClient.setQueryData(["goals", user?.id], newGoals);
-      reorderGoalMutation.mutate(newGoals);
     } else if (direction === 'down' && index < goals.length - 1) {
       [newGoals[index], newGoals[index + 1]] = [newGoals[index + 1], newGoals[index]];
-      queryClient.setQueryData(["goals", user?.id], newGoals);
-      reorderGoalMutation.mutate(newGoals);
-    }
+    } else return;
+    queryClient.setQueryData(["goals", user?.id], newGoals);
+    reorderGoalMutation.mutate(newGoals);
   };
 
   return (
@@ -129,34 +254,69 @@ export default function Suenos() {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Mis Sueños ✨</h1>
-          <p className="text-sm text-muted-foreground">Capacidad de ahorro: <span className="font-semibold text-primary">{formatQ(Math.max(savingsCapacity, 0))}/mes</span></p>
+          <p className="text-sm text-muted-foreground">
+            Capacidad de ahorro: <span className="font-semibold text-primary">{formatQ(Math.max(savingsCapacity, 0))}/mes</span>
+            {dataMonthsCount > 0 && <span className="text-xs opacity-60"> · {dataMonthsCount} mes{dataMonthsCount !== 1 ? 'es' : ''} de historial</span>}
+          </p>
         </div>
       </div>
 
-      {/* Goals list */}
       <div className="space-y-3 mb-4">
-        {goals.map((goal, index) => {
+        {goals.map((goal: any, index: number) => {
           const goalType = GOAL_TYPES.find((t) => t.id === goal.type);
           const Icon = goalType?.icon || TrendingUp;
-          const target = goal.down_payment || goal.total_amount || 1;
-          const currentSaved = goal.current_saved || goal.saved_amount || 0;
-          const pct = Math.round((currentSaved / target) * 100);
-          const remaining = target - currentSaved;
-          const monthsLeft = savingsCapacity > 0 && remaining > 0
-            ? Math.ceil(remaining / savingsCapacity)
-            : 0;
-          const viability = remaining <= 0
-            ? "green"
+          const computedPhase = goal.phase || (
+            (goal.installment_total || 0) > 0 && (goal.installment_current || 0) >= (goal.installment_total || 1)
+              ? 'completed'
+              : (goal.down_payment || 0) > 0 && (goal.current_saved || 0) >= (goal.down_payment || 0) && (goal.installment_total || 0) > 0
+                ? 'installments'
+                : 'saving'
+          );
+
+          // Progress values depend on phase
+          const isInstallmentPhase = computedPhase === 'installments';
+          const isCompleted = computedPhase === 'completed';
+          const pct = isInstallmentPhase
+            ? Math.round(((goal.installment_current || 0) / Math.max(goal.installment_total || 1, 1)) * 100)
+            : Math.round(((goal.current_saved || 0) / Math.max(goal.down_payment || goal.total_amount || 1, 1)) * 100);
+
+          const remaining = isInstallmentPhase
+            ? (goal.installment_total || 0) - (goal.installment_current || 0)
+            : Math.max((goal.down_payment || goal.total_amount || 0) - (goal.current_saved || 0), 0);
+
+          const monthsLeft = !isInstallmentPhase && savingsCapacity > 0 && remaining > 0
+            ? Math.ceil(remaining / savingsCapacity) : 0;
+
+          const viability = isCompleted || pct >= 100 ? 'green'
+            : isInstallmentPhase ? 'green'
+            : savingsCapacity <= 0 ? 'red'
+            : monthsLeft <= 12 ? 'green'
+            : monthsLeft <= 24 ? 'yellow' : 'red';
+
+          // BLOQUE 1D — Mensaje correcto según tipo y fase
+          const message = isCompleted
+            ? "🏆 ¡Sueño cumplido! Todas las cuotas pagadas."
+            : pct >= 100 && computedPhase === 'saving' && (goal.installment_total || 0) > 0
+              ? "🎉 ¡Enganche listo! Iniciando fase de cuotas..."
+            : pct >= 100
+              ? "🎉 ¡Meta alcanzada! Tenés el dinero completo."
+            : isInstallmentPhase
+              ? `💳 Cuota ${goal.installment_current || 0} de ${goal.installment_total || 0} · Próximo pago: día ${goal.payment_day || '?'}`
+            : (goal.down_payment || 0) > 0
+              ? `🏠 Juntando enganche · Faltan ${formatQ(remaining)}`
             : savingsCapacity <= 0
-              ? "red"
-              : monthsLeft <= 12
-                ? "green"
-                : monthsLeft <= 24
-                  ? "yellow"
-                  : "red";
+              ? "📊 Registrá tus gastos para calcular cuándo llegás."
+            : viability === 'green'
+              ? `✨ En ${monthsLeft} mes${monthsLeft !== 1 ? 'es' : ''} lo lográs.`
+            : viability === 'yellow'
+              ? `💪 Con disciplina, en ${monthsLeft} meses llegás.`
+              : `🌱 Encontrá fugas en tus gastos para acelerar.`;
 
           return (
-            <div key={goal.id} className="rounded-2xl bg-card p-4 border border-border shadow-sm transition-all">
+            <div key={goal.id} className={cn(
+              "rounded-2xl bg-card p-4 border shadow-sm transition-all",
+              isCompleted ? "border-green-500/30 bg-green-500/5" : "border-border"
+            )}>
               <div className="mb-3 flex items-center gap-3">
                 <div className={cn(
                   "flex h-10 w-10 items-center justify-center rounded-xl",
@@ -164,13 +324,24 @@ export default function Suenos() {
                   viability === "yellow" ? "bg-warning/15 text-warning" :
                   "bg-destructive/15 text-destructive"
                 )}>
-                  <Icon className="h-5 w-5" />
+                  {isCompleted ? <CheckCircle className="h-5 w-5 text-green-500" /> : <Icon className="h-5 w-5" />}
                 </div>
                 <div className="flex-1">
                   <p className="font-semibold text-foreground leading-tight">{goal.name}</p>
-                  <p className="text-xs text-muted-foreground">{goalType?.label} • Prioridad {goal.priority || index + 1}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {goalType?.label} · Prioridad {goal.priority || index + 1}
+                    {isInstallmentPhase && ` · ${goal.installment_current || 0}/${goal.installment_total || 0} cuotas`}
+                  </p>
                 </div>
-                <div className="flex flex-col gap-1">
+                {/* Edit/Delete buttons */}
+                <button onClick={() => setEditingGoal(goal)} className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors">
+                  <Edit2 className="h-3.5 w-3.5" />
+                </button>
+                <button onClick={() => setConfirmDelete(goal)} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+                {/* Reorder */}
+                <div className="flex flex-col gap-0.5">
                   <button onClick={() => handleReorder(index, 'up')} className="rounded p-0.5 text-muted-foreground hover:text-foreground">
                     <ArrowUp className="h-3.5 w-3.5" />
                   </button>
@@ -180,52 +351,54 @@ export default function Suenos() {
                 </div>
               </div>
 
+              {/* Progress bar */}
               <div className="mb-1 h-2.5 overflow-hidden rounded-full bg-muted">
-                <div className={cn("h-full rounded-full transition-all", pct >= 100 ? "bg-green-500" : "bg-accent")} style={{ width: `${Math.min(pct, 100)}%` }} />
+                <div
+                  className={cn("h-full rounded-full transition-all", isCompleted || pct >= 100 ? "bg-green-500" : isInstallmentPhase ? "bg-accent" : "bg-primary")}
+                  style={{ width: `${Math.min(pct, 100)}%` }}
+                />
               </div>
               <div className="mb-3 flex items-center justify-between text-xs font-semibold text-foreground">
-                <span>{formatQ(currentSaved)} <span className="text-muted-foreground font-normal">de {formatQ(target)}</span></span>
-                <span>{pct}%</span>
+                {isInstallmentPhase
+                  ? <span>{goal.installment_current || 0} <span className="text-muted-foreground font-normal">de {goal.installment_total || 0} cuotas</span></span>
+                  : <span>{formatQ(goal.current_saved || 0)} <span className="text-muted-foreground font-normal">de {formatQ(goal.down_payment || goal.total_amount || 0)}</span></span>
+                }
+                <span>{Math.min(pct, 100)}%</span>
               </div>
 
-              {/* Acciones */}
-              <div className="flex items-center gap-2 mb-3">
-                <button 
-                  onClick={() => setAddingToGoal(goal)}
-                  disabled={pct >= 100}
-                  className={cn(
-                    "flex flex-1 items-center justify-center gap-2 rounded-xl border py-2 text-xs font-semibold transition-all active:scale-[0.98]",
-                    pct >= 100 ? "bg-muted border-border text-muted-foreground" : "border-primary/20 text-primary bg-primary/5 hover:bg-primary/10"
+              {/* Action buttons */}
+              {!isCompleted && (
+                <div className="flex gap-2 mb-3">
+                  {isInstallmentPhase ? (
+                    <button
+                      onClick={() => payInstallmentMutation.mutate(goal)}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-accent/20 bg-accent/5 py-2 text-xs font-semibold text-accent hover:bg-accent/10 transition-all active:scale-[0.98]"
+                    >
+                      <CheckCircle className="h-3.5 w-3.5" />
+                      Pagar cuota de {goal.payment_day ? `día ${goal.payment_day}` : 'este mes'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setAddingToGoal(goal)}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/5 py-2 text-xs font-semibold text-primary hover:bg-primary/10 transition-all active:scale-[0.98]"
+                    >
+                      <Wallet className="h-3.5 w-3.5" />
+                      {(goal.down_payment || 0) > 0 ? 'Abonar al enganche' : 'Registrar Ahorro'}
+                    </button>
                   )}
-                >
-                  <Wallet className="h-3.5 w-3.5" />
-                  {pct >= 100 ? "Completado" : "Registrar Ahorro"}
-                </button>
-              </div>
+                </div>
+              )}
 
+              {/* Message */}
               <div className={cn(
                 "rounded-xl p-3 text-xs leading-relaxed",
-                pct >= 100 ? "bg-green-500/10 text-green-600 font-medium" : 
+                isCompleted ? "bg-green-500/10 text-green-600" :
                 viability === "green" ? "bg-primary/10 text-primary" :
                 viability === "yellow" ? "bg-warning/10 text-warning" :
                 "bg-destructive/10 text-destructive"
               )}>
-                {pct >= 100
-                  ? "🎉 ¡Meta alcanzada! Felicidades, tienes el dinero completo."
-                  : savingsCapacity <= 0
-                    ? "📊 Registra todos tus gastos para calcular cuándo llegas a tu meta."
-                    : viability === "green"
-                      ? `✨ Excelente ritmo. En ${monthsLeft} mes${monthsLeft !== 1 ? 'es' : ''} lo lográs.`
-                      : viability === "yellow"
-                        ? `💪 Es posible. Con disciplina, en ${monthsLeft} meses llegás.`
-                        : `🌱 Empieza registrando todos tus gastos. Encontrá fugas para aumentar tu ahorro.`}
+                {message}
               </div>
-
-              {goal.monthly_payment > 0 && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Cuota posterior a la meta: {formatQ(goal.monthly_payment)}/mes
-                </p>
-              )}
             </div>
           );
         })}
@@ -235,7 +408,7 @@ export default function Suenos() {
         <div className="mt-12 mb-8 text-center bg-accent/5 py-8 rounded-3xl border border-accent/20">
           <TrendingUp className="h-10 w-10 mx-auto text-accent mb-3 opacity-80" />
           <p className="text-lg font-medium text-foreground">¿Cuál es tu máximo sueño?</p>
-          <p className="text-sm text-muted-foreground mt-2 px-6">Agrega tu primer objetivo y deja que Flowi calcule para cuándo podrías tenerlo 🚀.</p>
+          <p className="text-sm text-muted-foreground mt-2 px-6">Agregá tu primer objetivo y Flowi calcula para cuándo podés tenerlo 🚀</p>
         </div>
       )}
 
@@ -243,77 +416,108 @@ export default function Suenos() {
         <Plus className="h-5 w-5 mr-1" /> Nuevo Sueño
       </Button>
 
-      {/* Deposit Modal */}
+      {/* Deposit/Abono Modal */}
       {addingToGoal && (
-        <DepositGoalModal
-          goalName={addingToGoal.name}
+        <DepositModal
+          goal={addingToGoal}
           onClose={() => setAddingToGoal(null)}
-          onSave={(amount) => depositGoalMutation.mutate({ 
-            id: addingToGoal.id, 
-            amount, 
-            current: addingToGoal.current_saved || addingToGoal.saved_amount || 0 
-          })}
+          onSave={(amount) => depositGoalMutation.mutate({ goal: addingToGoal, amount })}
         />
       )}
 
-      {/* New goal modal */}
+      {/* New Goal Modal */}
       {showForm && (
-        <NewGoalModal onClose={() => setShowForm(false)} onSave={(g) => addGoalMutation.mutate(g)} />
+        <GoalFormModal
+          onClose={() => setShowForm(false)}
+          onSave={(g) => addGoalMutation.mutate(g)}
+        />
+      )}
+
+      {/* Edit Goal Modal */}
+      {editingGoal && (
+        <GoalFormModal
+          initialData={editingGoal}
+          onClose={() => setEditingGoal(null)}
+          onSave={(g) => updateGoalMutation.mutate({ ...g, id: editingGoal.id })}
+        />
+      )}
+
+      {/* Confirm Delete */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
+          <div className="animate-fade-in w-full max-w-sm rounded-2xl bg-card p-6 border border-border shadow-2xl">
+            <h2 className="text-lg font-bold text-foreground mb-2">¿Eliminar este sueño?</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Vas a eliminar <strong>{confirmDelete.name}</strong>.
+              {confirmDelete.fixed_expense_id && " También se desactivará la cuota mensual asociada."}
+            </p>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setConfirmDelete(null)}>Cancelar</Button>
+              <Button variant="destructive" className="flex-1" onClick={() => deleteGoalMutation.mutate({ goalId: confirmDelete.id, fixedExpenseId: confirmDelete.fixed_expense_id })}>
+                Sí, eliminar
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-function DepositGoalModal({ goalName, onClose, onSave }: { goalName: string, onClose: () => void, onSave: (a: number) => void }) {
+// ---- MODALS ----
+
+function DepositModal({ goal, onClose, onSave }: { goal: any; onClose: () => void; onSave: (a: number) => void }) {
   const [amount, setAmount] = useState("");
+  const isEnganche = (goal.down_payment || 0) > 0;
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
       <div className="animate-fade-in w-full max-w-sm rounded-2xl bg-card p-6 border border-border shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-foreground">Abonar a tu meta</h2>
+          <h2 className="text-lg font-bold text-foreground">{isEnganche ? 'Abonar al enganche' : 'Abonar a tu meta'}</h2>
           <button onClick={onClose} className="rounded-full p-1 hover:bg-muted"><X className="h-5 w-5 text-muted-foreground" /></button>
         </div>
-        <p className="text-sm text-muted-foreground mb-4">¿Cuánto has apartado recientemente para <strong>{goalName}</strong>?</p>
-        <div className="mb-6">
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">Q</span>
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
-              className="w-full rounded-xl bg-background border border-border py-3 pl-8 pr-4 text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-              autoFocus
-            />
-          </div>
+        <p className="text-sm text-muted-foreground mb-4">¿Cuánto has apartado para <strong>{goal.name}</strong>?</p>
+        <div className="relative mb-6">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">Q</span>
+          <input
+            type="number" value={amount} onChange={(e) => setAmount(e.target.value)}
+            placeholder="0.00" autoFocus
+            className="w-full rounded-xl bg-background border border-border py-3 pl-8 pr-4 text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+          />
         </div>
-        <Button className="w-full" onClick={() => onSave(parseFloat(amount) || 0)} disabled={!amount}>Sumar a mi ahorro ✨</Button>
+        <Button className="w-full" onClick={() => onSave(parseFloat(amount) || 0)} disabled={!amount}>
+          Sumar a mi ahorro ✨
+        </Button>
       </div>
     </div>
   );
 }
 
-function NewGoalModal({ onClose, onSave }: { onClose: () => void; onSave: (g: any) => void }) {
-  const [name, setName] = useState("");
-  const [type, setType] = useState("");
-  const [totalAmount, setTotalAmount] = useState("");
-  const [hasDownPayment, setHasDownPayment] = useState(false);
-  const [downPayment, setDownPayment] = useState("");
-  const [hasMonthly, setHasMonthly] = useState(false);
-  const [monthlyPayment, setMonthlyPayment] = useState("");
+function GoalFormModal({ onClose, onSave, initialData }: { onClose: () => void; onSave: (g: any) => void; initialData?: any }) {
+  const [name, setName] = useState(initialData?.name || "");
+  const [type, setType] = useState(initialData?.type || "");
+  const [totalAmount, setTotalAmount] = useState(initialData?.total_amount ? initialData.total_amount.toString() : "");
+  const [hasDownPayment, setHasDownPayment] = useState(!!(initialData?.down_payment));
+  const [downPayment, setDownPayment] = useState(initialData?.down_payment ? initialData.down_payment.toString() : "");
+  const [hasMonthly, setHasMonthly] = useState(!!(initialData?.monthly_payment));
+  const [monthlyPayment, setMonthlyPayment] = useState(initialData?.monthly_payment ? initialData.monthly_payment.toString() : "");
+  const [installmentTotal, setInstallmentTotal] = useState(initialData?.installment_total ? initialData.installment_total.toString() : "");
+  const [paymentDay, setPaymentDay] = useState(initialData?.payment_day ? initialData.payment_day.toString() : "");
+
+  const isEdit = !!initialData;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-foreground/40 backdrop-blur-sm">
       <div className="animate-slide-up w-full max-w-lg rounded-t-2xl sm:rounded-2xl bg-card p-6 max-h-[90vh] overflow-y-auto">
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-foreground">Nuevo sueño</h2>
+          <h2 className="text-xl font-bold text-foreground">{isEdit ? 'Editar sueño' : 'Nuevo sueño'}</h2>
           <button onClick={onClose} className="rounded-full p-1 hover:bg-muted"><X className="h-5 w-5 text-muted-foreground" /></button>
         </div>
 
         <div className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-muted-foreground">Nombre de tu meta</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Mi primer carro o Viaje" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Mi primer carro o Viaje a Europa" />
           </div>
 
           <div>
@@ -321,8 +525,7 @@ function NewGoalModal({ onClose, onSave }: { onClose: () => void; onSave: (g: an
             <div className="grid grid-cols-4 gap-2">
               {GOAL_TYPES.map((t) => (
                 <button
-                  key={t.id}
-                  onClick={() => setType(t.id)}
+                  key={t.id} onClick={() => setType(t.id)}
                   className={cn(
                     "flex flex-col items-center gap-1 rounded-xl p-2.5 text-xs transition-all",
                     type === t.id ? "bg-accent text-accent-foreground shadow-md" : "bg-muted text-muted-foreground"
@@ -337,38 +540,51 @@ function NewGoalModal({ onClose, onSave }: { onClose: () => void; onSave: (g: an
 
           <div>
             <label className="mb-1 block text-sm font-medium text-muted-foreground">Costo total (Q)</label>
-            <Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="85000" />
+            <Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="Ej: 85000" />
           </div>
 
           <div className="flex items-center justify-between rounded-xl bg-muted p-3">
             <span className="text-sm font-medium text-foreground">¿Requiere enganche?</span>
             <Switch checked={hasDownPayment} onCheckedChange={setHasDownPayment} />
           </div>
-          {hasDownPayment && (
-            <Input type="number" value={downPayment} onChange={(e) => setDownPayment(e.target.value)} placeholder="Monto del enganche (Q)" />
-          )}
+          {hasDownPayment && <Input type="number" value={downPayment} onChange={(e) => setDownPayment(e.target.value)} placeholder="Monto del enganche (Q)" />}
 
           <div className="flex items-center justify-between rounded-xl bg-muted p-3">
-            <span className="text-sm font-medium text-foreground">¿Cuota mensual después?</span>
+            <span className="text-sm font-medium text-foreground">¿Cuota mensual posterior?</span>
             <Switch checked={hasMonthly} onCheckedChange={setHasMonthly} />
           </div>
           {hasMonthly && (
-            <Input type="number" value={monthlyPayment} onChange={(e) => setMonthlyPayment(e.target.value)} placeholder="Cuota mensual estimada (Q)" />
+            <div className="space-y-3 p-3 bg-accent/5 rounded-xl border border-accent/20">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Monto de la cuota (Q/mes)</label>
+                <Input type="number" value={monthlyPayment} onChange={(e) => setMonthlyPayment(e.target.value)} placeholder="Ej: 1200" className="mt-1" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Número de cuotas</label>
+                  <Input type="number" value={installmentTotal} onChange={(e) => setInstallmentTotal(e.target.value)} placeholder="Ej: 36" className="mt-1" min={1} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Día de pago (1-31)</label>
+                  <Input type="number" value={paymentDay} onChange={(e) => setPaymentDay(e.target.value)} placeholder="Ej: 15" className="mt-1" min={1} max={31} />
+                </div>
+              </div>
+            </div>
           )}
 
           <Button
             onClick={() => onSave({
-              name,
-              type,
+              name, type,
               total_amount: parseFloat(totalAmount) || 0,
               down_payment: hasDownPayment ? parseFloat(downPayment) || 0 : 0,
               monthly_payment: hasMonthly ? parseFloat(monthlyPayment) || 0 : 0,
+              installment_total: hasMonthly ? parseInt(installmentTotal) || 0 : 0,
+              payment_day: hasMonthly ? parseInt(paymentDay) || null : null,
             })}
-            className="w-full"
-            size="lg"
+            className="w-full" size="lg"
             disabled={!name || !type || !totalAmount}
           >
-            Crear mi sueño ✨
+            {isEdit ? 'Guardar cambios ✨' : 'Crear mi sueño ✨'}
           </Button>
         </div>
       </div>
