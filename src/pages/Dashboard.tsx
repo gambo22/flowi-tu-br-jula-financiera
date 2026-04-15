@@ -101,7 +101,7 @@ export default function Dashboard() {
 
   const totalSpentVariable = currentMonthExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   const totalSpentFixed = fixedExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const totalSpent = totalSpentFixed + totalSpentVariable;
+  const totalSpent = totalSpentVariable; // Barra refleja solo gasto variable real
   
   const accountsTotal = accounts.reduce((sum: number, acc: any) => sum + (Number(acc.balance) || 0), 0);
   const liquidWealth = rawCash + accountsTotal;
@@ -110,7 +110,7 @@ export default function Dashboard() {
   const totalDebtPayments = debts.reduce((sum: number, d: any) => sum + (d.minimum_payment || 0), 0);
   const available = monthlyIncome - totalSpentFixed - totalSpentVariable - totalDebtPayments;
 
-  const budgetPercent = monthlyIncome > 0 ? Math.round(((totalSpentFixed + totalSpentVariable) / monthlyIncome) * 100) : 0;
+  const budgetPercent = monthlyIncome > 0 ? Math.round(((totalSpentFixed + totalSpentVariable + totalDebtPayments) / monthlyIncome) * 100) : 0;
   const timePercent = Math.round((dayOfMonth / daysInMonth) * 100);
 
   const insight = INSIGHTS[today.getDate() % INSIGHTS.length];
@@ -283,7 +283,7 @@ export default function Dashboard() {
         </div>
         <div className="flex justify-between items-center mt-1">
            <p className="text-xs text-muted-foreground">
-             Gastado: <span className="font-semibold text-foreground">{formatQ(totalSpent)}</span>
+             Comprometido: <span className="font-semibold text-foreground">{formatQ(totalSpentFixed + totalSpentVariable + totalDebtPayments)}</span>
            </p>
            <p className="text-xs font-bold">{budgetPercent}%</p>
         </div>
