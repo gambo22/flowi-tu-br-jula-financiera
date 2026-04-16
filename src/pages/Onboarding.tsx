@@ -362,7 +362,7 @@ export default function Onboarding() {
                 { id: 'variable', l: 'Variable 📈', sub: 'Negocio propio' },
               ].map(t => (
                 <button key={t.id}
-                  onClick={() => updateData({ incomeFrequency: t.id as IncomeFrequency, incomePeriod1:'', incomePeriod2:'', incomePeriod3:'', incomePeriod4:'' })}
+                  onClick={() => updateData({ incomeFrequency: t.id as IncomeFrequency, incomePeriod1: '', incomePeriod2: '', incomePeriod3: '', incomePeriod4: '' })}
                   className={cn("p-3 rounded-xl border text-left transition-all",
                     data.incomeFrequency === t.id ? 'bg-primary text-white border-primary' : 'bg-card text-foreground border-border')}>
                   <p className="text-sm font-bold">{t.l}</p>
@@ -479,87 +479,90 @@ export default function Onboarding() {
           </div>
         )}
 
-        {/* STEP 8 — Deudas */}
+        {/* STEP 8 — Deudas (Premium teaser) */}
         {step === 8 && (
-          <div className="animate-fade-in pt-4 space-y-4">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">¿Tenés deudas activas?</h1>
-              <p className="text-sm text-muted-foreground mt-1">Para calcular tu disponible real. Podés saltarlo y agregarlo después.</p>
-            </div>
-
-            {data.debts.map((debt, i) => (
-              <div key={i} className="rounded-2xl border border-border p-4 bg-card space-y-3 relative">
-                <button onClick={() => updateData({ debts: data.debts.filter((_, idx) => idx !== i) })}
-                  className="absolute top-3 right-3 p-1 rounded-full hover:bg-muted">
-                  <X className="h-4 w-4 text-muted-foreground" />
-                </button>
-                <input placeholder="Nombre (ej: Visa BAM)" value={debt.name}
-                  onChange={(e) => updateData({ debts: data.debts.map((d, idx) => idx === i ? { ...d, name: e.target.value } : d) })}
-                  className="w-full p-2.5 border border-border rounded-xl bg-background text-foreground text-sm" />
-                <select value={debt.type}
-                  onChange={(e) => updateData({ debts: data.debts.map((d, idx) => idx === i ? { ...d, type: e.target.value } : d) })}
-                  className="w-full p-2.5 border border-border rounded-xl bg-background text-foreground text-sm">
-                  <option value="">Tipo de deuda</option>
-                  {DEBT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="number" placeholder="Saldo (Q)" value={debt.balance}
-                    onChange={(e) => updateData({ debts: data.debts.map((d, idx) => idx === i ? { ...d, balance: e.target.value } : d) })}
-                    className="p-2.5 border border-border rounded-xl bg-background text-foreground text-sm" />
-                  <input type="number" placeholder="Pago mín. (Q)" value={debt.minPayment}
-                    onChange={(e) => updateData({ debts: data.debts.map((d, idx) => idx === i ? { ...d, minPayment: e.target.value } : d) })}
-                    className="p-2.5 border border-border rounded-xl bg-background text-foreground text-sm" />
-                </div>
-              </div>
-            ))}
-
-            <button
-              onClick={() => updateData({ debts: [...data.debts, { name: "", type: "", balance: "", minPayment: "", rate: "", paymentDay: "" }] })}
-              className="w-full rounded-xl border-2 border-dashed border-border py-3 text-sm font-semibold text-muted-foreground hover:border-primary hover:text-primary transition-all">
-              + Agregar deuda
-            </button>
-          </div>
-        )}
-
-        {/* STEP 9 — Meta */}
-        {step === 9 && (
           <div className="animate-fade-in pt-4 space-y-5">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">¿Cuál es tu gran sueño? ✨</h1>
-              <p className="text-sm text-muted-foreground mt-1">Flowi calcula cuándo podés lograrlo. Podés saltarlo si querés.</p>
+            <div className="text-center pt-4">
+              <div className="text-5xl mb-3">💳</div>
+              <h1 className="text-2xl font-extrabold text-foreground">Liquidá tus deudas más rápido</h1>
+              <p className="text-sm text-muted-foreground mt-2">Con Flowi Premium sabés exactamente en cuánto tiempo quedás libre.</p>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              {GOAL_TYPES.map(g => (
-                <button key={g.id} onClick={() => updateData({ goalType: g.id })}
-                  className={cn("p-3 border rounded-xl flex flex-col items-center gap-1 text-xs transition-all",
-                    data.goalType === g.id ? 'bg-primary text-white border-primary shadow-md' : 'bg-card border-border text-foreground')}>
-                  <g.icon className="h-5 w-5" />
-                  {g.label}
-                </button>
+
+            <div className="rounded-2xl bg-gradient-to-br from-purple-600/20 to-purple-800/10 border border-purple-500/30 p-5 space-y-3">
+              {[
+                { icon: "🏔️", title: "Estrategia Avalancha", desc: "Pagás menos intereses en total" },
+                { icon: "❄️", title: "Estrategia Bola de Nieve", desc: "Cerrás deudas pequeñas primero — más motivación" },
+                { icon: "📅", title: "Proyección mes a mes", desc: "Flowi te dice exactamente cuándo quedás libre" },
+                { icon: "⚡", title: "Pago extra inteligente", desc: "¿Cayó algo extra? Flowi te dice dónde ponerlo" },
+              ].map((item) => (
+                <div key={item.title} className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3">
+                  <span className="text-xl">{item.icon}</span>
+                  <div>
+                    <p className="text-sm font-bold text-foreground">{item.title}</p>
+                    <p className="text-xs text-muted-foreground">{item.desc}</p>
+                  </div>
+                </div>
               ))}
             </div>
-            {data.goalType && (
-              <div className="space-y-3">
-                <input placeholder="Nombre de tu sueño" value={data.goalName}
-                  onChange={e => updateData({ goalName: e.target.value })}
-                  className="w-full p-3 border border-border rounded-xl bg-card text-foreground" />
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-semibold text-muted-foreground">Q</span>
-                  <input type="number" placeholder="Monto total" value={data.goalAmount}
-                    onChange={e => updateData({ goalAmount: e.target.value })}
-                    className="w-full p-3 pl-8 border border-border rounded-xl bg-card text-foreground" />
+
+            <div className="rounded-2xl bg-card border border-border p-4 text-center">
+              <p className="text-xs text-muted-foreground">Ejemplo real</p>
+              <p className="text-sm font-bold text-foreground mt-1">Visa BAM · Q15,000 · 24% anual</p>
+              <div className="flex justify-center gap-6 mt-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Pagando mínimo</p>
+                  <p className="text-base font-extrabold text-destructive">82 meses</p>
+                </div>
+                <div className="w-px bg-border" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Con Flowi</p>
+                  <p className="text-base font-extrabold text-primary">31 meses</p>
                 </div>
               </div>
-            )}
-            <div className="pt-4 space-y-3">
-              <button disabled={loading || !data.goalType || !data.goalName || !data.goalAmount}
-                onClick={() => handleFinish(false)}
-                className="w-full bg-primary text-white font-bold p-4 rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
-                {loading ? <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" /> : "Entrar a Flowi ✨"}
-              </button>
-              <button disabled={loading} onClick={() => handleFinish(true)}
-                className="w-full text-muted-foreground font-semibold text-sm py-3">
-                Saltar y hacerlo después
+            </div>
+
+            <p className="text-center text-xs text-muted-foreground">Agregás tus deudas reales una vez dentro de la app ✌️</p>
+          </div>
+        )}
+        {/* STEP 9 — Sueños (Premium teaser) + Finish */}
+        {step === 9 && (
+          <div className="animate-fade-in pt-4 space-y-5">
+            <div className="text-center pt-4">
+              <div className="text-5xl mb-3">✨</div>
+              <h1 className="text-2xl font-extrabold text-foreground">Tus sueños tienen precio. Flowi te dice cómo llegar.</h1>
+              <p className="text-sm text-muted-foreground mt-2">Desde un carro hasta un viaje o un fondo de emergencia.</p>
+            </div>
+
+            <div className="rounded-2xl bg-gradient-to-br from-orange-500/20 to-orange-700/10 border border-orange-500/30 p-5 space-y-3">
+              {[
+                { icon: "🚗", title: "Vehículo con enganche", desc: "Calculá cuota mensual y cuándo tener el enganche" },
+                { icon: "✈️", title: "Viaje soñado", desc: "Ahorrá en potes separados sin mezclar plata" },
+                { icon: "🏠", title: "Casa propia", desc: "Proyección realista con enganche y cuotas" },
+                { icon: "🛡️", title: "Fondo de emergencia", desc: "3-6 meses de gastos — tu red de seguridad" },
+              ].map((item) => (
+                <div key={item.title} className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3">
+                  <span className="text-xl">{item.icon}</span>
+                  <div>
+                    <p className="text-sm font-bold text-foreground">{item.title}</p>
+                    <p className="text-xs text-muted-foreground">{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-2xl bg-card border border-border p-4 text-center">
+              <p className="text-xs text-muted-foreground">Todo esto te espera adentro 👇</p>
+              <p className="text-sm font-bold text-foreground mt-1">Empezá gratis. Desbloqueá cuando quieras.</p>
+            </div>
+
+            <div className="pt-2 space-y-3">
+              <button
+                disabled={loading}
+                onClick={() => handleFinish(true)}
+                className="w-full bg-primary text-white font-bold p-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">
+                {loading
+                  ? <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  : <>Entrar a Flowi <Zap className="h-5 w-5" /></>}
               </button>
             </div>
           </div>
