@@ -435,7 +435,7 @@ export default function Perfil() {
           </div>
 
 
-          href={`mailto:soporte@flowi.gt?subject=Reporte de error — Flowi&body=Descripción del problema:%0A%0A%0APágina donde ocurrió:%0A%0ADispositivo:%0A`}
+          href={`mailto:soporte@flowi.gt?subject=Reporte de error - Flowi&body=Descripción del problema:%0A%0A%0APágina donde ocurrió:%0A%0ADispositivo:%0A`}
           className="flex items-center gap-3 bg-card border border-border rounded-2xl p-4 hover:bg-muted/50 transition-colors shadow-sm"
           >
           <div className="h-9 w-9 rounded-xl bg-destructive/10 flex items-center justify-center flex-shrink-0">
