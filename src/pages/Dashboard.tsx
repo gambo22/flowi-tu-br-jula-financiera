@@ -370,36 +370,43 @@ export default function Dashboard() {
 
       {/* Flowi dice — IA */}
       {isPremium ? (
-        (insightsLoading || aiInsights.length > 0) && (
-          <div className="rounded-2xl bg-card border border-border p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <Lightbulb className="h-4 w-4 text-accent" />
-              <span className="text-xs font-bold text-accent">Flowi dice</span>
-              <span className="text-xs text-muted-foreground opacity-60">· IA</span>
-            </div>
-            {insightsLoading ? (
-              <div className="space-y-2">
-                <div className="h-14 rounded-xl bg-muted/50 animate-pulse" />
-                <div className="h-14 rounded-xl bg-muted/40 animate-pulse" />
-              </div>
-            ) : (
-              <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
-                {aiInsights.map((ins, i) => (
-                  <div key={i} className={`flex-shrink-0 w-68 rounded-xl p-3 border ${
-                    ins.type === "urgent" ? "bg-destructive/10 border-destructive/20 text-destructive" :
-                    ins.type === "warning" ? "bg-warning/10 border-warning/20 text-warning" :
-                    ins.type === "success" ? "bg-green-500/10 border-green-500/20 text-green-600" :
-                    "bg-accent/10 border-accent/20 text-accent"
-                  }`}>
-                    <p className="text-xs font-bold mb-1">{ins.title}</p>
-                    <p className="text-xs leading-relaxed opacity-90">{ins.message}</p>
-                    {ins.action && <p className="text-xs font-semibold mt-1.5 opacity-75">👉 {ins.action}</p>}
-                  </div>
-                ))}
-              </div>
-            )}
+        <div className="rounded-2xl bg-card border border-border p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Lightbulb className="h-4 w-4 text-accent" />
+            <span className="text-xs font-bold text-accent">Flowi dice</span>
+            <span className="text-xs text-muted-foreground opacity-60">· IA</span>
           </div>
-        )
+          {insightsLoading ? (
+            <div className="space-y-2">
+              <div className="h-14 rounded-xl bg-muted/50 animate-pulse" />
+              <div className="h-14 rounded-xl bg-muted/40 animate-pulse" />
+            </div>
+          ) : aiInsights.length === 0 ? (
+            <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+              {INSIGHTS.slice(0, 3).map((text, i) => (
+                <div key={i} className="flex-shrink-0 w-68 rounded-xl p-3 border bg-accent/10 border-accent/20 text-accent">
+                  <p className="text-xs font-bold mb-1">💡 Tip Flowi</p>
+                  <p className="text-xs leading-relaxed opacity-90">{text}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+              {aiInsights.map((ins, i) => (
+                <div key={i} className={`flex-shrink-0 w-68 rounded-xl p-3 border ${
+                  ins.type === "urgent" ? "bg-destructive/10 border-destructive/20 text-destructive" :
+                  ins.type === "warning" ? "bg-warning/10 border-warning/20 text-warning" :
+                  ins.type === "success" ? "bg-green-500/10 border-green-500/20 text-green-600" :
+                  "bg-accent/10 border-accent/20 text-accent"
+                }`}>
+                  <p className="text-xs font-bold mb-1">{ins.title}</p>
+                  <p className="text-xs leading-relaxed opacity-90">{ins.message}</p>
+                  {ins.action && <p className="text-xs font-semibold mt-1.5 opacity-75">👉 {ins.action}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       ) : (
         <button
           onClick={() => setShowPaywall(true)}
