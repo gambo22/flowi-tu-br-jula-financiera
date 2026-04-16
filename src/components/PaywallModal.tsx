@@ -46,11 +46,27 @@ export function PaywallModal({ onClose, feature }: PaywallModalProps) {
           ))}
         </div>
 
-        <button className="w-full bg-violet-600 text-white py-4 rounded-2xl font-semibold text-base active:scale-95 transition-transform">
-          Ver planes — desde Q39/mes
-        </button>
+        <div className="space-y-3">
+          <button 
+            onClick={() => window.open('https://app.recurrente.com/s/promptboxgt/anual', '_blank')}
+            className="w-full bg-violet-600 text-white py-3.5 rounded-2xl font-bold text-sm active:scale-95 transition-transform shadow-md border border-violet-500"
+          >
+            Premium Anual — Q600/año (2 meses gratis)
+          </button>
 
-        <button onClick={onClose} className="w-full mt-3 text-sm text-gray-400 py-2">
+          <button 
+            onClick={() => window.open('https://app.recurrente.com/s/promptboxgt/mensual', '_blank')}
+            className="w-full bg-violet-100 text-violet-700 py-3.5 rounded-2xl font-bold text-sm active:scale-95 transition-transform"
+          >
+            Premium Mensual — Q60/mes
+          </button>
+        </div>
+
+        <p className="text-center text-xs text-gray-400 mt-4 mb-1">
+          Pagá con tarjeta. Cancela cuando quieras.
+        </p>
+
+        <button onClick={onClose} className="w-full text-sm text-gray-400 font-medium py-2 hover:text-gray-600">
           Ahora no
         </button>
       </div>

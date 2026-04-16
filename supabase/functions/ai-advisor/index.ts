@@ -53,7 +53,7 @@ Disponible estimado: Q${Math.max(income - thisTotal - fixedTotal, 0).toFixed(0)}
     if (!response.ok) {
       const errText = await response.text()
       console.error('Anthropic error:', errText)
-      throw new Error('Failed generating insights via Anthropic API')
+      throw new Error(`Anthropic API error: ${errText}`)
     }
 
     const data = await response.json()
