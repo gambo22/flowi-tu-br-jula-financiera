@@ -1,13 +1,69 @@
 import { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Plus, TrendingUp, Lightbulb, Landmark, Banknote } from "lucide-react";
+import { Plus, TrendingUp, Lightbulb, Landmark, Banknote, ChevronRight } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { EXPENSE_CATEGORIES, INSIGHTS, formatQ } from "@/lib/constants";
+import { EXPENSE_CATEGORIES, CATEGORY_GROUPS, SAVING_TIPS, INSIGHTS, formatQ } from "@/lib/constants";
 import AddExpenseModal from "@/components/AddExpenseModal";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { calculatePaymentDate, getPaymentDistanceText } from "@/lib/dateUtils";
 import { getFlowiInsights, type FlowiInsight } from "@/lib/aiAdvisor";
+
+// Tip rotativo — mezcla insights + saving tips, cambia cada 8h
+function getRotatingTip() {
+  const allTips = [
+    ...INSIGHTS.map((text, i) => ({ type: "insight" as const, text, id: `insight-${i}` })),
+    ...SAVING_TIPS.map((t) => ({ type: "saving" as const, text: `${t.emoji} ${t.title}: ${t.description}`, id: t.id })),
+  ];
+  const idx = Math.floor(Date.now() / (1000 * 60 * 60 * 8)) % allTips.length;
+  return allTips[idx];
+}
+
+// Mini bar chart por grupo de categorías
+function CategoryMiniChart({ expenses }: { expenses: any[] }) {
+  const today = new Date();
+  const monthExp = expenses.filter((e: any) => {
+    const d = new Date(e.date);
+    return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+  });
+
+  const grouped = CATEGORY_GROUPS.map((g) => {
+    const total = monthExp
+      .filter((e: any) => (g.categories as readonly string[]).includes(e.category))
+      .reduce((s: number, e: any) => s + (e.amount || 0), 0);
+    return { ...g, total };
+  }).filter((g) => g.total > 0).sort((a, b) => b.total - a.total).slice(0, 5);
+
+  if (grouped.length === 0) return null;
+
+  const max = Math.max(...grouped.map((g) => g.total));
+
+  return (
+    <div className="rounded-2xl bg-card p-4 shadow-sm border border-border">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-foreground">Gastos del mes</h3>
+        <span className="text-xs text-muted-foreground">por categoría</span>
+      </div>
+      <div className="space-y-2.5">
+        {grouped.map((g) => (
+          <div key={g.id} className="flex items-center gap-2">
+            <span className="w-20 text-xs text-muted-foreground truncate">{g.label}</span>
+            <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.round((g.total / max) * 100)}%`,
+                  backgroundColor: g.color,
+                }}
+              />
+            </div>
+            <span className="text-xs font-semibold text-foreground w-20 text-right">{formatQ(g.total)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const [showAddExpense, setShowAddExpense] = useState(false);
@@ -97,7 +153,7 @@ export default function Dashboard() {
   const accountsTotal = accounts.reduce((sum: number, acc: any) => sum + (Number(acc.balance) || 0), 0);
   const liquidWealth = rawCash + accountsTotal;
 
-  const insight = INSIGHTS[today.getDate() % INSIGHTS.length];
+  const rotatingTip = useMemo(() => getRotatingTip(), []);
   const recentExpenses = expenses.slice(0, 3);
 
   const dateStr = today.toLocaleDateString("es-GT", {
@@ -138,7 +194,6 @@ export default function Dashboard() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["fixed_expenses", user?.id] }),
   });
 
-  // IA — mínimo 3 gastos para activar
   useEffect(() => {
     if (!profile?.id || expenses.length < 3) { setInsightsLoading(false); return; }
     const today2 = new Date();
@@ -156,7 +211,7 @@ export default function Dashboard() {
       .catch(() => setInsightsLoading(false));
   }, [profile?.id, expenses.length]);
 
-  // Payday logic — mostrar badge solo 3 días antes
+  // Payday logic
   let paymentText = "";
   let paymentDaysUntil = 99;
   if (profile?.income_frequency === "monthly") {
@@ -188,22 +243,10 @@ export default function Dashboard() {
 
   const getPaymentBadge = () => {
     if (!paymentText) return null;
-    if (paymentDaysUntil === 0) return {
-      text: "¡Hoy es día de pago, bicho! 💸🎉 ¡A darle con todo!",
-      color: "bg-green-500/20 text-green-400 border-green-500/30 animate-pulse"
-    };
-    if (paymentDaysUntil === 1) return {
-      text: "¡Mañana cae el pago! Aguantá un día más 💪",
-      color: "bg-accent/20 text-accent border-accent/30"
-    };
-    if (paymentDaysUntil === 2) return {
-      text: "En 2 días cae el pago, ya merito 🗓️",
-      color: "bg-accent/15 text-accent border-accent/20"
-    };
-    if (paymentDaysUntil === 3) return {
-      text: "En 3 días cae el pago 🗓️",
-      color: "bg-accent/15 text-accent border-accent/20"
-    };
+    if (paymentDaysUntil === 0) return { text: "¡Hoy es día de pago, bicho! 💸🎉 ¡A darle con todo!", color: "bg-green-500/20 text-green-400 border-green-500/30 animate-pulse" };
+    if (paymentDaysUntil === 1) return { text: "¡Mañana cae el pago! Aguantá un día más 💪", color: "bg-accent/20 text-accent border-accent/30" };
+    if (paymentDaysUntil === 2) return { text: "En 2 días cae el pago, ya merito 🗓️", color: "bg-accent/15 text-accent border-accent/20" };
+    if (paymentDaysUntil === 3) return { text: "En 3 días cae el pago 🗓️", color: "bg-accent/15 text-accent border-accent/20" };
     return null;
   };
   const paymentBadge = getPaymentBadge();
@@ -222,7 +265,7 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Badge pago próximo — solo 3 días antes */}
+      {/* Badge pago */}
       {paymentBadge && (
         <div className={`font-semibold px-3 py-1.5 rounded-full text-xs flex items-center gap-2 border w-fit ${paymentBadge.color}`}>
           <Landmark className="h-3.5 w-3.5" />
@@ -230,43 +273,38 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Disponible card */}
-      <div className={`rounded-3xl p-6 relative overflow-hidden ${available >= 0 ? "bg-primary" : "bg-destructive"} text-primary-foreground`}>
-        <div className="absolute right-[-10%] top-[-10%] opacity-10">
-          <Banknote className="h-32 w-32" />
+      {/* ── Disponible card — compacta ── */}
+      <div className={`rounded-2xl p-4 relative overflow-hidden ${available >= 0 ? "bg-primary" : "bg-destructive"} text-primary-foreground`}>
+        <div className="absolute right-[-8%] top-[-10%] opacity-10">
+          <Banknote className="h-24 w-24" />
         </div>
         <div className="relative z-10">
-          <p className="mb-1 text-sm font-medium opacity-90">Disponible Real (Fin de mes)</p>
-          <p className="text-3xl font-bold tracking-tight">{formatQ(available)}</p>
-          <div className="mt-4 flex flex-col gap-1.5 bg-primary-foreground/10 rounded-xl p-3 text-xs font-medium">
+          <p className="text-xs font-medium opacity-80 mb-0.5">Disponible Real (fin de mes)</p>
+          <p className="text-4xl font-bold tracking-tight">{formatQ(available)}</p>
+          <div className="mt-3 flex flex-col gap-1 text-xs font-medium opacity-90">
             <div className="flex justify-between">
-              <span className="opacity-75">Tu Ingreso Mes</span>
+              <span className="opacity-70">Ingreso</span>
               <span>{formatQ(monthlyIncome)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="opacity-75">Compromisos fijos</span>
-              <span className="font-bold" style={{ color: '#ff6b6b' }}>- {formatQ(totalSpentFixed)}</span>
+              <span className="opacity-70">Compromisos fijos</span>
+              <span style={{ color: "#FF2020" }}>- {formatQ(totalSpentFixed)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="opacity-75">Gastado variable</span>
-              <span className="font-bold" style={{ color: '#ff6b6b' }}>- {formatQ(totalSpentVariable)}</span>
+              <span className="opacity-70">Gastado variable</span>
+              <span style={{ color: "#FF2020" }}>- {formatQ(totalSpentVariable)}</span>
             </div>
             {totalDebtPayments > 0 && (
               <div className="flex justify-between">
-                <span className="opacity-75">Pagos de deudas</span>
-                <span className="font-bold" style={{ color: '#ff6b6b' }}>- {formatQ(totalDebtPayments)}</span>
+                <span className="opacity-70">Pagos de deudas</span>
+                <span style={{ color: "#FF2020" }}>- {formatQ(totalDebtPayments)}</span>
               </div>
             )}
-            <div className="h-px w-full bg-white/20 my-1" />
-            <div className="flex justify-between font-bold">
-              <span>Disponible limpio:</span>
-              <span>{formatQ(available)}</span>
-            </div>
           </div>
         </div>
       </div>
 
-      {/* Budget progress */}
+      {/* Progreso del mes */}
       <div className="rounded-2xl bg-card p-4 shadow-sm border border-border">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-sm font-medium text-foreground">Progreso del mes</span>
@@ -286,7 +324,10 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Recent expenses */}
+      {/* Mini gráfica por categoría */}
+      <CategoryMiniChart expenses={expenses} />
+
+      {/* Últimos gastos */}
       <div className="rounded-2xl bg-card p-4 shadow-sm border border-border">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-foreground">Últimos gastos</h3>
@@ -355,13 +396,15 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Reflexión del día */}
+      {/* Tip rotativo — Reflexión / Técnica de ahorro */}
       <div className="rounded-2xl bg-accent/10 p-4">
         <div className="mb-1 flex items-center gap-2">
           <Lightbulb className="h-4 w-4 text-accent" />
-          <span className="text-xs font-semibold text-accent">Reflexión del día</span>
+          <span className="text-xs font-semibold text-accent">
+            {rotatingTip.type === "saving" ? "Técnica de ahorro" : "Reflexión del día"}
+          </span>
         </div>
-        <p className="text-sm leading-relaxed text-foreground italic">"{insight}"</p>
+        <p className="text-sm leading-relaxed text-foreground italic">"{rotatingTip.text}"</p>
       </div>
 
       {/* FAB */}

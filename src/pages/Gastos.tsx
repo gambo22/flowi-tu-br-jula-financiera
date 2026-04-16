@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Trash2, ChevronDown, ChevronUp, TrendingUp } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
@@ -11,6 +12,7 @@ import { toast } from "sonner";
 export default function Gastos() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [editingExpense, setEditingExpense] = useState<any>(null);
@@ -125,7 +127,16 @@ export default function Gastos() {
 
   return (
     <div className="animate-fade-in p-4 pb-24">
-      <h1 className="mb-1 text-2xl font-bold text-foreground">Gastos</h1>
+      <div className="mb-1 flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-foreground">Gastos</h1>
+        <button
+          onClick={() => navigate("/analisis")}
+          className="flex items-center gap-1.5 rounded-xl bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all"
+        >
+          <TrendingUp className="h-3.5 w-3.5" />
+          Ver análisis
+        </button>
+      </div>
       <p className="mb-4 text-sm text-muted-foreground">
         {filter
           ? <>Filtrado: <span className="font-semibold text-foreground">{formatQ(totalFiltered)}</span> · Total mes: <span className="font-semibold">{formatQ(totalAllMonth)}</span></>

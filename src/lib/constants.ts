@@ -57,3 +57,86 @@ export const INSIGHTS = [
 export const formatQ = (amount: number): string => {
   return `Q${amount.toLocaleString("es-GT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
+
+// ─── Grupos de categorías para Análisis ───────────────────────────────────────
+export const CATEGORY_GROUPS = [
+  {
+    id: "casa",
+    label: "Casa",
+    color: "#10B981",
+    categories: ["mercado", "empleada", "servicios", "mantenimiento"],
+  },
+  {
+    id: "transporte",
+    label: "Transporte",
+    color: "#3B82F6",
+    categories: ["gasolinera", "transporte"],
+  },
+  {
+    id: "educacion",
+    label: "Educación",
+    color: "#8B5CF6",
+    categories: ["colegiatura"],
+  },
+  {
+    id: "salud",
+    label: "Salud",
+    color: "#EF4444",
+    categories: ["salud"],
+  },
+  {
+    id: "entretenimiento",
+    label: "Entretenimiento",
+    color: "#F59E0B",
+    categories: ["restaurantes", "entretenimiento", "suscripciones"],
+  },
+  {
+    id: "estilo",
+    label: "Estilo de vida",
+    color: "#EC4899",
+    categories: ["ropa", "viajes", "hormiga"],
+  },
+  {
+    id: "proteccion",
+    label: "Protección",
+    color: "#64748B",
+    categories: ["seguros"],
+  },
+  {
+    id: "otros",
+    label: "Otros",
+    color: "#6B7280",
+    categories: ["otros"],
+  },
+] as const;
+
+// ─── Técnicas de ahorro ────────────────────────────────────────────────────────
+export const SAVING_TIPS = [
+  {
+    id: "cafe_fantasma",
+    emoji: "☕",
+    title: "Café fantasma",
+    description: "Por cada café o antojo, guardá la misma cantidad. Tu futuro vos te lo agradece.",
+    triggerCategories: ["restaurantes", "hormiga"],
+    triggerAlways: false,
+  },
+  {
+    id: "impulso_48h",
+    emoji: "⏱️",
+    title: "Regla del impulso",
+    description: "Esperá 48 horas antes de compras no esenciales. Si en 2 días lo seguís queriendo, es tuyo.",
+    triggerCategories: ["ropa", "viajes", "entretenimiento"],
+    minAmount: 200,
+    triggerAlways: false,
+  },
+  {
+    id: "redondeo",
+    emoji: "🔄",
+    title: "Redondeo invisible",
+    description: "Redondeá este gasto al siguiente centenar y mové la diferencia a tu fondo de ahorro.",
+    triggerCategories: [],
+    triggerAlways: true,
+  },
+] as const;
+
+export type SavingTip = (typeof SAVING_TIPS)[number];
