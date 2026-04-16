@@ -405,7 +405,7 @@ export default function Dashboard() {
               <div className="h-14 rounded-xl bg-muted/50 animate-pulse" />
               <div className="h-14 rounded-xl bg-muted/40 animate-pulse" />
             </div>
-          ) : (
+          ) : aiInsights.length > 0 ? (
             <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
               {aiInsights.map((ins, i) => (
                 <div key={i} className={`flex-shrink-0 w-68 rounded-xl p-3 border ${
@@ -419,6 +419,11 @@ export default function Dashboard() {
                   {ins.action && <p className="text-xs font-semibold mt-1.5 opacity-75">👉 {ins.action}</p>}
                 </div>
               ))}
+            </div>
+          ) : (
+            // IA falló o no retornó — mostrar tip rotativo igual
+            <div className="rounded-xl bg-muted/50 p-3">
+              <p className="text-xs leading-relaxed text-foreground italic">"{preTips[preTipIndex]}"</p>
             </div>
           )}
         </div>
