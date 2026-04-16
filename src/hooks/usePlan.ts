@@ -25,15 +25,16 @@ export function usePlan(): UsePlanReturn {
 
     const { data } = await supabase
       .from('subscriptions')
-      .select('plan, current_period_end')
+      .select('plan, current_period_end, is_beta')
       .eq('user_id', user.id)
       .single()
 
     if (data) {
       const isActive =
-        data.plan === 'premium' &&
+        data.is_beta === true ||
+        (data.plan === 'premium' &&
         data.current_period_end &&
-        new Date(data.current_period_end) > new Date()
+        new Date(data.current_period_end) > new Date())
 
       setPlan(isActive ? 'premium' : 'free')
     } else {
