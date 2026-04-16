@@ -1,65 +1,64 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
 serve(async (req) => {
-  // Retornar siempre 200 si no es POST, o para evitar timeouts
-  if (req.method !== 'POST') {
-    return new Response('OK', { status: 200 })
+  // 1. Ignorar JWT completamente (usaremos --no-verify-jwt). 
+  // Manejador OPTIONS por si las dudas en CORS:
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const payload = await req.json()
+    // 3. Parsear body directamente
+    const body = await req.json()
+    
+    // 4. Log exacto
+    console.log('evento:', body.event_type, body.customer_email)
 
-    // 1 & 2. Parsear el body JSON y leer event_type
-    // Asumimos estructura plana o anidada (dependiendo de cómo envíe Svix/Recurrente el webhook)
-    const eventType = payload.type || payload.event_type
-    const data = payload.data || payload
+    const eventType = body.event_type || body.type
+    const email = body.customer_email
+    
+    // Fallbacks opcionales para recurente (dependiendo si viene anidado en 'data')
+    const finalEvent = eventType || body.data?.type
+    const finalEmail = email || body.data?.customer?.email || body.data?.customer_email
 
-    // El payload tiene customer_email (string)
-    const email = data.customer_email || payload.customer_email || data.email
-    const subId = data.id || payload.id
-    const customerId = data.customer_id || payload.customer_id || data.customer?.id
-
-    if (!eventType || !email) {
-      console.log('Skipping webhook: missing event_type or email', { eventType, email })
-      return new Response('OK', { status: 200 })
+    if (!finalEvent || !finalEmail) {
+      return new Response('OK', { status: 200, headers: corsHeaders })
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    // 2. Usar solo service role key
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    )
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('Missing Supabase env vars')
-      return new Response('OK', { status: 200 })
-    }
-
-    // Inicializar cliente admin de Supabase
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
-
-    // 3. Buscar al usuario en auth.users por email usando supabase admin client
-    // Supabase js no trae un findUserByEmail, así que listamos y buscamos
-    // (A futuro podría requerir paginación si crecen mucho los usuarios)
+    // 6. Buscar user por email
     const { data: usersData, error: userError } = await supabaseAdmin.auth.admin.listUsers()
     
     if (userError) {
-      console.error('Error fetching users from auth:', userError)
-      return new Response('OK', { status: 200 })
+      console.error('Error fetching users:', userError)
+      return new Response('OK', { status: 200, headers: corsHeaders })
     }
 
-    const user = usersData.users.find((u: any) => u.email === email)
+    const user = usersData.users.find((u: any) => u.email === finalEmail)
     
     if (!user) {
-      console.error(`Webhook bypass: User not found in auth.users for email: ${email}`)
-      return new Response('OK', { status: 200 })
+      console.error(`User not found for email: ${finalEmail}`)
+      return new Response('OK', { status: 200, headers: corsHeaders })
     }
 
-    // 4. Lógica de upsert en tabla "subscriptions"
+    // 5. Lógica de plan según event_type
     const now = new Date().toISOString()
     let plan = 'free'
 
-    if (eventType === 'subscription.create') plan = 'premium'
-    if (eventType === 'subscription.cancel') plan = 'free'
-    if (eventType === 'subscription.past_due') plan = 'free'
+    if (finalEvent === 'subscription.create') plan = 'premium'
+    if (finalEvent === 'subscription.cancel') plan = 'free'
+    if (finalEvent === 'subscription.past_due') plan = 'free'
 
     const upsertData: any = {
       user_id: user.id,
@@ -67,28 +66,25 @@ serve(async (req) => {
       updated_at: now
     }
 
-    // Guardar detalles solo si es create
-    if (eventType === 'subscription.create') {
-      upsertData.recurrente_customer_id = customerId
-      upsertData.recurrente_subscription_id = subId
+    if (finalEvent === 'subscription.create') {
+      upsertData.recurrente_customer_id = body.customer_id || body.data?.customer_id || body.data?.customer?.id
+      upsertData.recurrente_subscription_id = body.id || body.data?.id
     }
 
+    // 7. Upsert en subscriptions
     const { error: upsertError } = await supabaseAdmin
       .from('subscriptions')
       .upsert(upsertData, { onConflict: 'user_id' })
 
     if (upsertError) {
-      console.error('Error upserting subscription:', upsertError)
-    } else {
-      console.log(`[Success] Plan ${plan} set for user ${user.id} (${email})`)
+      console.error('Error upserting:', upsertError)
     }
 
-    // 5. Retornar 200 OK siempre
-    return new Response('OK', { status: 200 })
+    // 8. Return 200 siempre
+    return new Response('OK', { status: 200, headers: corsHeaders })
 
   } catch (err: any) {
-    console.error('Webhook processing error:', err.message)
-    // Retornar 200 OK siempre para que Svix no reintente y bloquee la cola
-    return new Response('OK', { status: 200 })
+    console.error('Error:', err.message)
+    return new Response('OK', { status: 200, headers: corsHeaders })
   }
 })
