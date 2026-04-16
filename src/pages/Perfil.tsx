@@ -443,7 +443,7 @@ export default function Perfil() {
           </div>
           <div className="flex-1">
             <p className="text-sm font-semibold text-foreground">Reportar un error</p>
-            <p className="text-xs text-muted-foreground">soporte@flowi.gt — te respondemos pronto</p>
+            <p className="text-xs text-muted-foreground">soporte@flowi.gt - te respondemos pronto</p>
           </div>
           <ChevronDown className="h-4 w-4 text-muted-foreground -rotate-90 flex-shrink-0" />
         </a>
