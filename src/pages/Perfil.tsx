@@ -323,7 +323,7 @@ export default function Perfil() {
                   <div key={d.id} className="p-3 flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold text-foreground">{d.name}</p>
-                      <p className="text-xs text-muted-foreground">{d.type} · {d.interest_rate}% anual</p>
+                      <p className="text-xs text-muted-foreground">{d.type} - {d.interest_rate}% anual</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold text-destructive">{formatQ(d.current_balance || 0)}</p>
@@ -361,80 +361,69 @@ export default function Perfil() {
               ))}
             </div>
           </div>
+          <a href="mailto:soporte@flowi.gt?subject=Reporte%20de%20error%20Flowi&body=Descripcion%20del%20problema:%0A%0ADispositivo:%0A" className="flex items-center gap-3 bg-card border border-border rounded-2xl p-4 hover:bg-muted/50 transition-colors shadow-sm">
+            <div className="h-9 w-9 rounded-xl bg-destructive/10 flex items-center justify-center flex-shrink-0">
+              <MessageCircle className="h-4 w-4 text-destructive" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-foreground">Reportar un error</p>
+              <p className="text-xs text-muted-foreground">soporte@flowi.gt - te respondemos pronto</p>
+            </div>
+            <ChevronDown className="h-4 w-4 text-muted-foreground -rotate-90 flex-shrink-0" />
+          </a>
+        </section>
 
-          href="mailto:soporte@flowi.gt?subject=Reporte de error - Flowi&body=Descripcion del problema:%0A%0A%0APagina donde ocurrio:%0A%0ADispositivo:%0A"
-          className="flex items-center gap-3 bg-card border border-border rounded-2xl p-4 hover:bg-muted/50 transition-colors shadow-sm"
-          >
-          <div className="h-9 w-9 rounded-xl bg-destructive/10 flex items-center justify-center flex-shrink-0">
-            <MessageCircle className="h-4 w-4 text-destructive" />
+        <section>
+          <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wide uppercase px-1">CONFIGURACIONES</p>
+          <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm divide-y divide-border/50">
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Modo Oscuro</p>
+                <p className="text-xs text-muted-foreground">Cuida tus ojos de noche</p>
+              </div>
+              <Switch checked={isDark} onCheckedChange={(val) => toggleDarkMode(val)} />
+            </div>
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Cambiar contrasena</p>
+                <p className="text-xs text-muted-foreground">
+                  {resetSent ? "Revisa tu correo" : "Te enviamos un link a " + user?.email}
+                </p>
+              </div>
+              <button onClick={handleResetPassword} disabled={resetLoading || resetSent} className="text-xs font-bold text-primary disabled:opacity-50 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors">
+                {resetLoading ? <span className="h-3 w-3 rounded-full border-2 border-primary border-t-transparent animate-spin inline-block" /> : resetSent ? "Enviado" : "Enviar link"}
+              </button>
+            </div>
+            <div className="p-4 flex items-center justify-between cursor-pointer hover:bg-muted/50 text-destructive" onClick={handleSignOut}>
+              <div>
+                <p className="text-sm font-bold">Cerrar Sesion Segura</p>
+                <p className="text-xs opacity-80">Tus datos quedan guardados en la nube</p>
+              </div>
+              <LogOut className="h-5 w-5" />
+            </div>
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-foreground">Reportar un error</p>
-            <p className="text-xs text-muted-foreground">soporte@flowi.gt - te respondemos pronto</p>
-          </div>
-          <ChevronDown className="h-4 w-4 text-muted-foreground -rotate-90 flex-shrink-0" />
-        </a>
-      </section>
+          <p className="text-center text-xs font-mono text-muted-foreground/60 mt-4">Flowi v1.1.0 Latino</p>
+        </section>
 
-      <section>
-        <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wide uppercase px-1">CONFIGURACIONES</p>
-        <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm divide-y divide-border/50">
-          <div className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-foreground">Modo Oscuro</p>
-              <p className="text-xs text-muted-foreground">Cuida tus ojos de noche</p>
-            </div>
-            <Switch checked={isDark} onCheckedChange={(val) => toggleDarkMode(val)} />
-          </div>
-          <div className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-foreground">Cambiar contrasena</p>
-              <p className="text-xs text-muted-foreground">
-                {resetSent ? "Revisa tu correo" : "Te enviamos un link a " + user?.email}
-              </p>
-            </div>
-            <button
-              onClick={handleResetPassword}
-              disabled={resetLoading || resetSent}
-              className="text-xs font-bold text-primary disabled:opacity-50 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors"
-            >
-              {resetLoading ? <span className="h-3 w-3 rounded-full border-2 border-primary border-t-transparent animate-spin inline-block" /> : resetSent ? "Enviado" : "Enviar link"}
-            </button>
-          </div>
-          <div className="p-4 flex items-center justify-between cursor-pointer hover:bg-muted/50 text-destructive" onClick={handleSignOut}>
-            <div>
-              <p className="text-sm font-bold">Cerrar Sesion Segura</p>
-              <p className="text-xs opacity-80">Tus datos quedan guardados en la nube</p>
-            </div>
-            <LogOut className="h-5 w-5" />
-          </div>
-        </div>
-        <p className="text-center text-xs font-mono text-muted-foreground/60 mt-4">Flowi v1.1.0 Latino</p>
-      </section>
+      </div>
+
+      {(showAddFixed || !!editingExpense) && (
+        <AddFixedExpenseModal
+          initialData={editingExpense}
+          onClose={() => { setShowAddFixed(false); setEditingExpense(null); }}
+          onSave={(exp: any) => upsertFixedExpenseMutation.mutate(exp)}
+        />
+      )}
+
+      {editingField === "incomeModal" && (
+        <IncomeEditorModal
+          profile={profile}
+          onClose={() => setEditingField(null)}
+          onUserUpdate={() => { refreshProfile(); setEditingField(null); }}
+        />
+      )}
 
     </div>
-
-      {
-    (showAddFixed || !!editingExpense) && (
-      <AddFixedExpenseModal
-        initialData={editingExpense}
-        onClose={() => { setShowAddFixed(false); setEditingExpense(null); }}
-        onSave={(exp: any) => upsertFixedExpenseMutation.mutate(exp)}
-      />
-    )
-  }
-
-  {
-    editingField === "incomeModal" && (
-      <IncomeEditorModal
-        profile={profile}
-        onClose={() => setEditingField(null)}
-        onUserUpdate={() => { refreshProfile(); setEditingField(null); }}
-      />
-    )
-  }
-
-    </div >
   );
 }
 
@@ -501,7 +490,7 @@ function IncomeEditorModal({ profile, onClose, onUserUpdate }: { profile: any; o
                 <Input type="number" placeholder="Sueldo Base Mensual Q" value={p1} onChange={(e) => setP1(e.target.value)} />
                 <label className="text-xs font-semibold block pt-2">Cuando depositan?</label>
                 <select value={payType} onChange={(e) => setPayType(e.target.value)} className="w-full text-sm p-2 rounded border bg-card">
-                  <option value="last_business_day">Fin de Mes (Habil)</option>
+                  <option value="last_business_day">Fin de Mes Habil</option>
                   <option value="fixed_day">Dia fijo</option>
                 </select>
                 {payType === 'fixed_day' && <Input type="number" placeholder="Dia" value={d1} onChange={e => setD1(e.target.value)} />}
