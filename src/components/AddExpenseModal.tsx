@@ -82,6 +82,7 @@ export default function AddExpenseModal({
   const [showTip, setShowTip] = useState(false);
   const [activeTip, setActiveTip] = useState<(typeof SAVING_TIPS)[number] | null>(null);
   const [savedAmount, setSavedAmount] = useState(0);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -121,9 +122,11 @@ export default function AddExpenseModal({
   const canSave = amount && category;
   const canSaveInstallment = amount && category && installmentTotal && installmentAmount && paymentDay;
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return;
     if (isNewCreditInstallment) {
       if (!canSaveInstallment) return;
+      setSaving(true);
       onSaveFixed?.({
         name: note || EXPENSE_CATEGORIES.find((c) => c.id === category)?.label || "Cuota crédito",
         category,
@@ -131,9 +134,11 @@ export default function AddExpenseModal({
         installment_total: parseInt(installmentTotal),
         payment_day: parseInt(paymentDay),
       });
+      setSaving(false);
       onClose();
     } else {
       if (!canSave) return;
+      setSaving(true);
       const numAmount = parseFloat(amount);
       onSave({
         id: initialData?.id,
@@ -144,16 +149,15 @@ export default function AddExpenseModal({
         is_recurring: false,
         payment_method: paymentMethod,
       });
-      // Show saving tip — only for new expenses
-      if (!initialData) {
-        const tip = getSavingTip(category, numAmount);
-        if (tip) {
-          setSavedAmount(numAmount);
-          setActiveTip(tip);
-          setShowTip(true);
-          return; // Don't close yet — show tip first
-        }
+      const tip = getSavingTip(category, numAmount);
+      if (!initialData && tip) {
+        setSavedAmount(numAmount);
+        setActiveTip(tip);
+        setShowTip(true);
+        setSaving(false);
+        return;
       }
+      setSaving(false);
       onClose();
     }
   };
@@ -359,11 +363,13 @@ export default function AddExpenseModal({
           onClick={handleSave}
           className="w-full"
           size="lg"
-          disabled={isNewCreditInstallment ? !canSaveInstallment : !canSave}
+          disabled={(isNewCreditInstallment ? !canSaveInstallment : !canSave) || saving}
         >
-          {isNewCreditInstallment
-            ? `Agregar ${installmentTotal || "?"} cuotas a Compromisos 💳`
-            : initialData ? "Actualizar gasto ✨" : "Guardar gasto ✨"}
+          {saving
+            ? <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin"/>{" "}Guardando...</span>
+            : isNewCreditInstallment
+              ? `Agregar ${installmentTotal || "?"} cuotas a Compromisos 💳`
+              : initialData ? "Actualizar gasto ✨" : "Guardar gasto ✨"}
         </Button>
       </div>
     </div>

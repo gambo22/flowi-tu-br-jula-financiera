@@ -480,6 +480,7 @@ export default function Suenos() {
 
 function DepositModal({ goal, onClose, onSave }: { goal: any; onClose: () => void; onSave: (a: number) => void }) {
   const [amount, setAmount] = useState("");
+  const [saving, setSaving] = useState(false);
   const isEnganche = (goal.down_payment || 0) > 0;
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
@@ -497,8 +498,14 @@ function DepositModal({ goal, onClose, onSave }: { goal: any; onClose: () => voi
             className="w-full rounded-xl bg-background border border-border py-3 pl-8 pr-4 text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
           />
         </div>
-        <Button className="w-full" onClick={() => onSave(parseFloat(amount) || 0)} disabled={!amount}>
-          Sumar a mi ahorro ✨
+        <Button
+          className="w-full"
+          onClick={async () => { if (saving) return; setSaving(true); await onSave(parseFloat(amount) || 0); setSaving(false); }}
+          disabled={!amount || saving}
+        >
+          {saving
+            ? <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin"/>Guardando...</span>
+            : "Sumar a mi ahorro ✨"}
         </Button>
       </div>
     </div>
@@ -515,6 +522,7 @@ function GoalFormModal({ onClose, onSave, initialData }: { onClose: () => void; 
   const [monthlyPayment, setMonthlyPayment] = useState(initialData?.monthly_payment ? initialData.monthly_payment.toString() : "");
   const [installmentTotal, setInstallmentTotal] = useState(initialData?.installment_total ? initialData.installment_total.toString() : "");
   const [paymentDay, setPaymentDay] = useState(initialData?.payment_day ? initialData.payment_day.toString() : "");
+  const [saving, setSaving] = useState(false);
 
   const isEdit = !!initialData;
 
@@ -585,18 +593,25 @@ function GoalFormModal({ onClose, onSave, initialData }: { onClose: () => void; 
           )}
 
           <Button
-            onClick={() => onSave({
-              name, type,
-              total_amount: parseFloat(totalAmount) || 0,
-              down_payment: hasDownPayment ? parseFloat(downPayment) || 0 : 0,
-              monthly_payment: hasMonthly ? parseFloat(monthlyPayment) || 0 : 0,
-              installment_total: hasMonthly ? parseInt(installmentTotal) || 0 : 0,
-              payment_day: hasMonthly ? parseInt(paymentDay) || null : null,
-            })}
+            onClick={async () => { 
+              if (saving) return; 
+              setSaving(true); 
+              await onSave({
+                name, type,
+                total_amount: parseFloat(totalAmount) || 0,
+                down_payment: hasDownPayment ? parseFloat(downPayment) || 0 : 0,
+                monthly_payment: hasMonthly ? parseFloat(monthlyPayment) || 0 : 0,
+                installment_total: hasMonthly ? parseInt(installmentTotal) || 0 : 0,
+                payment_day: hasMonthly ? parseInt(paymentDay) || null : null,
+              }); 
+              setSaving(false); 
+            }}
             className="w-full" size="lg"
-            disabled={!name || !type || !totalAmount}
+            disabled={!name || !type || !totalAmount || saving}
           >
-            {isEdit ? 'Guardar cambios ✨' : 'Crear mi sueño ✨'}
+            {saving
+              ? <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin"/>Guardando...</span>
+              : isEdit ? "Guardar cambios ✨" : "Crear mi sueño ✨"}
           </Button>
         </div>
       </div>

@@ -159,6 +159,13 @@ export default function Dashboard() {
 
   const rotatingTip = useMemo(() => getRotatingTip(), []);
   const recentExpenses = expenses.slice(0, 3);
+  
+  // Tip rotativo para cuando hay < 3 gastos (cambia cada vez que se abre)
+  const preTips = useMemo(() => [
+    ...SAVING_TIPS.map(t => `${t.emoji} ${t.title}: ${t.description}`),
+    ...INSIGHTS,
+  ], []);
+  const preTipIndex = useMemo(() => Math.floor(Date.now() / (1000 * 60 * 30)) % preTips.length, [preTips]);
 
   const dateStr = today.toLocaleDateString("es-GT", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
@@ -374,21 +381,29 @@ export default function Dashboard() {
           <div className="mb-3 flex items-center gap-2">
             <Lightbulb className="h-4 w-4 text-accent" />
             <span className="text-xs font-bold text-accent">Flowi dice</span>
-            <span className="text-xs text-muted-foreground opacity-60">· IA</span>
+            {expenses.length >= 3 && <span className="text-xs text-muted-foreground opacity-60">· IA</span>}
           </div>
-          {insightsLoading ? (
+
+          {expenses.length < 3 ? (
+            <div className="space-y-3">
+              <div className="rounded-xl bg-accent/10 border border-accent/20 p-3">
+                <p className="text-xs font-bold text-accent mb-1">
+                  {expenses.length === 0
+                    ? "¡Registrá tu primer gasto para empezar! 🚀"
+                    : `${expenses.length} de 3 gastos registrados — ¡ya casi! 🧠`}
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Con 3 gastos registrados, Flowi empieza a analizar tus patrones y generarte consejos personalizados.
+                </p>
+              </div>
+              <div className="rounded-xl bg-muted/50 p-3">
+                <p className="text-xs leading-relaxed text-foreground italic">"{preTips[preTipIndex]}"</p>
+              </div>
+            </div>
+          ) : insightsLoading ? (
             <div className="space-y-2">
               <div className="h-14 rounded-xl bg-muted/50 animate-pulse" />
               <div className="h-14 rounded-xl bg-muted/40 animate-pulse" />
-            </div>
-          ) : aiInsights.length === 0 ? (
-            <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
-              {INSIGHTS.slice(0, 3).map((text, i) => (
-                <div key={i} className="flex-shrink-0 w-68 rounded-xl p-3 border bg-accent/10 border-accent/20 text-accent">
-                  <p className="text-xs font-bold mb-1">💡 Tip Flowi</p>
-                  <p className="text-xs leading-relaxed opacity-90">{text}</p>
-                </div>
-              ))}
             </div>
           ) : (
             <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
