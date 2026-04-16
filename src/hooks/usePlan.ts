@@ -32,9 +32,7 @@ export function usePlan(): UsePlanReturn {
     if (data) {
       const isActive =
         data.is_beta === true ||
-        (data.plan === 'premium' &&
-        data.current_period_end &&
-        new Date(data.current_period_end) > new Date())
+        data.plan === 'premium'
 
       setPlan(isActive ? 'premium' : 'free')
     } else {
