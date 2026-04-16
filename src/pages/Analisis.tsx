@@ -137,28 +137,38 @@ export default function Analisis() {
         ))}
       </div>
 
-      {/* Totales por mes — bar chart */}
+      {/* Totales por mes — scroll horizontal cuando > 6 meses */}
       <div className="rounded-2xl bg-card border border-border p-4 mb-4">
         <p className="text-xs font-semibold text-muted-foreground mb-3">Total gastado por mes</p>
-        <div className="flex items-end gap-2 h-20">
-          {months.map(({ label }, mi) => {
-            const val = monthTotals[mi];
-            const pct = Math.round((val / maxTotal) * 100);
-            const isLast = mi === months.length - 1;
-            return (
-              <div key={label} className="flex-1 flex flex-col items-center gap-1">
-                <span className="text-[9px] text-muted-foreground font-medium">{formatQ(val)}</span>
-                <div className="w-full rounded-t-lg transition-all duration-500"
-                  style={{
-                    height: `${Math.max(pct, 4)}%`,
-                    backgroundColor: isLast ? "#10B981" : "#10B98160",
-                    minHeight: "4px",
-                  }}
-                />
-                <span className="text-[9px] text-muted-foreground">{MONTHS[months[mi].month]}</span>
-              </div>
-            );
-          })}
+        <div className="overflow-x-auto -mx-1 px-1">
+          <div
+            className="flex items-end gap-2 h-20"
+            style={{ minWidth: range > 6 ? `${range * 44}px` : "100%" }}
+          >
+            {months.map(({ label }, mi) => {
+              const val = monthTotals[mi];
+              const pct = Math.round((val / maxTotal) * 100);
+              const isLast = mi === months.length - 1;
+              return (
+                <div key={label} className="flex-1 flex flex-col items-center gap-1 min-w-[36px]">
+                  {val > 0 && (
+                    <span className="text-[9px] text-muted-foreground font-medium whitespace-nowrap">
+                      {formatQ(val)}
+                    </span>
+                  )}
+                  <div
+                    className="w-full rounded-t-lg transition-all duration-500"
+                    style={{
+                      height: `${Math.max(pct, 4)}%`,
+                      backgroundColor: isLast ? "#10B981" : "#10B98160",
+                      minHeight: "4px",
+                    }}
+                  />
+                  <span className="text-[9px] text-muted-foreground">{MONTHS[months[mi].month]}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 

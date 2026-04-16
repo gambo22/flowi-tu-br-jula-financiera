@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plus, TrendingUp, ArrowUp, ArrowDown, Wallet, X, Edit2, Trash2, CheckCircle } from "lucide-react";
 import { GOAL_TYPES, formatQ } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -13,6 +14,7 @@ import { toast } from "sonner";
 export default function Suenos() {
   const { profile, user } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
   const [addingToGoal, setAddingToGoal] = useState<any>(null);
   const [editingGoal, setEditingGoal] = useState<any>(null);
@@ -259,6 +261,12 @@ export default function Suenos() {
             {dataMonthsCount > 0 && <span className="text-xs opacity-60"> · {dataMonthsCount} mes{dataMonthsCount !== 1 ? 'es' : ''} de historial</span>}
           </p>
         </div>
+        <button
+          onClick={() => navigate("/ahorro")}
+          className="flex items-center gap-1.5 rounded-xl bg-primary/10 border border-primary/20 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition-all">
+          <Wallet className="h-3.5 w-3.5" />
+          Mi Ahorro
+        </button>
       </div>
 
       <div className="space-y-3 mb-4">

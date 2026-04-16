@@ -265,7 +265,9 @@ export default function Presupuesto() {
   const totalSpent = useMemo(() => currentMonthExpenses.reduce((s, e) => s + (e.amount || 0), 0), [currentMonthExpenses]);
   const goalsCommitted = useMemo(() => goals.filter((g: any) => g.phase !== 'completed').reduce((s: number, g: any) => s + (g.monthly_payment || 0), 0), [goals]);
   const totalDebtPayments = useMemo(() => debts.reduce((s: number, d: any) => s + (d.minimum_payment || 0), 0), [debts]);
-  const available = monthlyIncome - totalSpent - goalsCommitted - totalDebtPayments;
+  const totalFixed = fixedExpenses.reduce((s: number, e: any) => s + (e.amount || 0), 0);
+  const available = monthlyIncome - totalFixed - goalsCommitted - totalDebtPayments - totalSpent;
+  const freeToSpend = monthlyIncome - totalFixed - goalsCommitted - totalDebtPayments;
 
   // Savings fund calculations
   const savingsTarget = savingsFund?.target_amount || 0;
@@ -341,9 +343,12 @@ export default function Presupuesto() {
           <p className="text-lg font-bold text-accent">{formatQ(goalsCommitted)}</p>
           {goalsCommitted > 0 && <p className="text-[10px] text-muted-foreground mt-0.5">Suma de cuotas de tus metas</p>}
         </div>
-        <div className={cn("rounded-xl p-3 border border-border", available >= 0 ? "bg-primary/10" : "bg-destructive/10")}>
-          <p className="text-xs text-muted-foreground">Disponible real</p>
-          <p className={cn("text-lg font-bold", available >= 0 ? "text-primary" : "text-destructive")}>{formatQ(available)}</p>
+        <div className={cn("rounded-xl p-3 border border-border", freeToSpend - totalSpent >= 0 ? "bg-primary/10" : "bg-destructive/10")}>
+          <p className="text-xs text-muted-foreground">Para gastar aún</p>
+          <p className={cn("text-lg font-bold", freeToSpend - totalSpent >= 0 ? "text-primary" : "text-destructive")}>
+            {formatQ(Math.max(freeToSpend - totalSpent, 0))}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">de {formatQ(freeToSpend)} disponibles</p>
         </div>
       </div>
 

@@ -18,6 +18,7 @@ const Auth = lazy(() => import("./pages/Auth"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const Analisis = lazy(() => import("./pages/Analisis"));
+const Ahorro = lazy(() => import("./pages/Ahorro"));
 
 const FlowiSplash = () => (
   <div style={{
@@ -67,6 +68,7 @@ function AppLayout() {
               <Route path="/suenos" element={<Suenos />} />
               <Route path="/deudas" element={<Deudas />} />
               <Route path="/analisis" element={<Analisis />} />
+              <Route path="/ahorro" element={<Ahorro />} />
               <Route path="/perfil" element={<Perfil />} />
             </Route>
 
