@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -10,12 +10,25 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { usePlan } from "@/hooks/usePlan";
 
 export default function Perfil() {
   const { user, profile, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { refetch: refetchPlan } = usePlan();
   const [editingField, setEditingField] = useState<string | null>(null);
+  const [showUpgradeSuccess, setShowUpgradeSuccess] = useState(false);
+
+  // Detectar regreso de pago exitoso
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('upgraded') === 'true') {
+      setShowUpgradeSuccess(true);
+      refetchPlan();
+      window.history.replaceState({}, '', '/perfil');
+    }
+  }, []);
 
   // Profile data forms
   const [name, setName] = useState(profile?.name || "");
@@ -36,7 +49,7 @@ export default function Perfil() {
         .select("*")
         .eq("user_id", user?.id)
         .order("created_at", { ascending: false });
-      if (error && error.code !== '42P01') throw error; // handle missing table gracefully
+      if (error && error.code !== '42P01') throw error;
       return data || [];
     },
     enabled: !!user?.id,
@@ -50,7 +63,6 @@ export default function Perfil() {
         .select("*")
         .eq("user_id", user?.id)
         .order("created_at", { ascending: false });
-      // Ignoring strictly created_at if non-existent, falling back to id sort via default
       if (error) {
         if (error.code === '42703') {
           const { data: fbData } = await supabase.from('accounts').select('*').eq('user_id', user?.id);
@@ -75,7 +87,6 @@ export default function Perfil() {
 
   const totalDebt = debts.reduce((s: number, d: any) => s + (d.current_balance || 0), 0);
   const totalMinPayments = debts.reduce((s: number, d: any) => s + (d.minimum_payment || 0), 0);
-
 
   const updateProfileMutation = useMutation({
     mutationFn: async (updates: any) => {
@@ -148,43 +159,20 @@ export default function Perfil() {
     }
   };
 
-  // Estado para FAQ
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   const FAQ = [
-    {
-      q: "¿Cómo agrego un gasto recurrente?",
-      a: "Al agregar un gasto con método 'Crédito', activá la opción 'Es a cuotas'. Se agregará automáticamente a tus Compromisos Fijos en Presupuesto."
-    },
-    {
-      q: "¿Qué es el Disponible Real?",
-      a: "Es cuánto te queda al fin de mes si cumplís todos tus compromisos: ingreso menos gastos fijos, variable y pagos mínimos de deudas."
-    },
-    {
-      q: "¿Qué es 'Para gastar aún' en Presupuesto?",
-      a: "Es cuánto podés gastar todavía este mes en variable, descontando fijos, deudas y sueños pero sin contar lo que ya gastaste."
-    },
-    {
-      q: "¿Cómo funciona el Análisis de gastos?",
-      a: "Entrá a Gastos → Ver análisis. Ahí ves tus gastos agrupados por categoría (Casa, Transporte, etc.) comparados mes a mes."
-    },
-    {
-      q: "¿Mis datos están seguros?",
-      a: "Sí. Flowi usa Supabase con cifrado y Row Level Security — solo vos podés ver tus datos. Nunca los compartimos."
-    },
-    {
-      q: "¿Cómo configuro mi día de pago?",
-      a: "En Perfil → Tu Ingreso → tocás el monto. Ahí podés configurar frecuencia de cobro (mensual, quincenal, semanal) y el día exacto."
-    },
-    {
-      q: "¿Qué son los potes de ahorro?",
-      a: "En Sueños → Mi Ahorro podés crear potes separados: cuenta de banco, inversión, activo o efectivo. Cada uno lleva su propio historial."
-    },
+    { q: "¿Cómo agrego un gasto recurrente?", a: "Al agregar un gasto con método 'Crédito', activá la opción 'Es a cuotas'. Se agregará automáticamente a tus Compromisos Fijos en Presupuesto." },
+    { q: "¿Qué es el Disponible Real?", a: "Es cuánto te queda al fin de mes si cumplís todos tus compromisos: ingreso menos gastos fijos, variable y pagos mínimos de deudas." },
+    { q: "¿Qué es 'Para gastar aún' en Presupuesto?", a: "Es cuánto podés gastar todavía este mes en variable, descontando fijos, deudas y sueños pero sin contar lo que ya gastaste." },
+    { q: "¿Cómo funciona el Análisis de gastos?", a: "Entrá a Gastos → Ver análisis. Ahí ves tus gastos agrupados por categoría (Casa, Transporte, etc.) comparados mes a mes." },
+    { q: "¿Mis datos están seguros?", a: "Sí. Flowi usa Supabase con cifrado y Row Level Security — solo vos podés ver tus datos. Nunca los compartimos." },
+    { q: "¿Cómo configuro mi día de pago?", a: "En Perfil → Tu Ingreso → tocás el monto. Ahí podés configurar frecuencia de cobro (mensual, quincenal, semanal) y el día exacto." },
+    { q: "¿Qué son los potes de ahorro?", a: "En Sueños → Mi Ahorro podés crear potes separados: cuenta de banco, inversión, activo o efectivo. Cada uno lleva su propio historial." },
   ];
 
   const getInitials = (str: string) => str ? str.trim().charAt(0).toUpperCase() : "U";
 
-  // Dark mode inline
   const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark' || document.documentElement.classList.contains('dark'));
 
   const toggleDarkMode = (val: boolean) => {
@@ -198,7 +186,6 @@ export default function Perfil() {
     }
   };
 
-  // Translations and parsing logic
   const parseIncomeLabel = () => {
     if (profile?.income_frequency === 'monthly') return "Mensual";
     if (profile?.income_frequency === 'biweekly') return "Quincenal";
@@ -207,6 +194,56 @@ export default function Perfil() {
     return profile?.income_type || "Fijo";
   };
 
+  // PANTALLA DE ÉXITO PREMIUM
+  if (showUpgradeSuccess) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center px-6 text-center">
+        <div className="text-6xl mb-6 animate-bounce">🎉</div>
+
+        <div className="bg-gradient-to-br from-purple-600 to-purple-800 rounded-3xl p-8 max-w-sm w-full shadow-2xl shadow-purple-900/50">
+          <div className="text-5xl mb-4">⚡</div>
+          <h1 className="text-2xl font-bold text-white mb-2">
+            ¡Ya sos Premium, bicho!
+          </h1>
+          <p className="text-purple-200 text-sm mb-6">
+            Tu plata ahora tiene superpoderes. Todo desbloqueado.
+          </p>
+
+          <div className="space-y-3 text-left mb-8">
+            {[
+              { icon: '📊', text: 'Analizá tus gastos por categoría' },
+              { icon: '🎯', text: 'Creá tus sueños con cuotas' },
+              { icon: '💳', text: 'Controlá tus deudas' },
+              { icon: '🏦', text: 'Diversificá tu ahorro' },
+              { icon: '🤖', text: 'Consultá tu IA advisor' },
+            ].map((item) => (
+              <div key={item.text} className="flex items-center gap-3 bg-white/10 rounded-xl px-4 py-3">
+                <span className="text-xl">{item.icon}</span>
+                <span className="text-white text-sm">{item.text}</span>
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={() => {
+              setShowUpgradeSuccess(false);
+              navigate('/analisis');
+            }}
+            className="w-full bg-white text-purple-700 font-bold py-4 rounded-2xl text-base"
+          >
+            Explorar Premium →
+          </button>
+        </div>
+
+        <button
+          onClick={() => setShowUpgradeSuccess(false)}
+          className="mt-6 text-gray-500 text-sm"
+        >
+          Ir al perfil
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in p-4 pb-24 min-h-screen bg-background">
@@ -220,7 +257,6 @@ export default function Perfil() {
 
       <div className="space-y-6">
 
-        {/* MI PERFIL SECTION */}
         <section>
           <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wide uppercase px-1">MI PERFIL</p>
           <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
@@ -249,7 +285,6 @@ export default function Perfil() {
                 )}
               </div>
 
-              {/* Ingreso Editable Complejo */}
               <div className="p-4 bg-transparent cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setEditingField("incomeModal")}>
                 <div className="flex items-center justify-between">
                   <div>
@@ -264,7 +299,6 @@ export default function Perfil() {
           </div>
         </section>
 
-        {/* EFECTIVO DISPONIBLE */}
         <section>
           <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wide uppercase px-1">EFECTIVO DISPONIBLE</p>
           <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
@@ -297,8 +331,6 @@ export default function Perfil() {
           </div>
         </section>
 
-
-        {/* VISUALIZADOR DE GASTOS FIJOS / COMPROMISOS */}
         <section>
           <div className="flex items-center justify-between px-1 mb-3">
             <p className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">TUS COMPROMISOS (GASTOS FIJOS)</p>
@@ -344,7 +376,6 @@ export default function Perfil() {
           </div>
         </section>
 
-        {/* RESUMEN DEUDAS */}
         {debts.length > 0 && (
           <section className="mb-8">
             <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wide uppercase px-1">DEUDAS ACTIVAS</p>
@@ -377,7 +408,6 @@ export default function Perfil() {
           </section>
         )}
 
-        {/* AYUDA / REPORTAR ERROR */}
         <section className="mb-6">
           <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wide uppercase px-1">AYUDA</p>
           <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm mb-3">
@@ -392,10 +422,7 @@ export default function Perfil() {
                       <HelpCircle className="h-4 w-4 text-primary flex-shrink-0" />
                       <span className="text-sm font-medium text-foreground">{item.q}</span>
                     </div>
-                    <ChevronDown className={cn(
-                      "h-4 w-4 text-muted-foreground flex-shrink-0 transition-transform",
-                      openFaq === i && "rotate-180"
-                    )} />
+                    <ChevronDown className={cn("h-4 w-4 text-muted-foreground flex-shrink-0 transition-transform", openFaq === i && "rotate-180")} />
                   </button>
                   {openFaq === i && (
                     <div className="px-4 pb-4 pt-0">
@@ -407,80 +434,80 @@ export default function Perfil() {
             </div>
           </div>
 
-          {/* Reportar error */}
-          <a
-            href={`mailto:soporte@flowi.gt?subject=Reporte de error — Flowi&body=Descripción del problema:%0A%0A%0APágina donde ocurrió:%0A%0ADispositivo:%0A`}
-            className="flex items-center gap-3 bg-card border border-border rounded-2xl p-4 hover:bg-muted/50 transition-colors shadow-sm"
+
+          href={`mailto:soporte@flowi.gt?subject=Reporte de error — Flowi&body=Descripción del problema:%0A%0A%0APágina donde ocurrió:%0A%0ADispositivo:%0A`}
+          className="flex items-center gap-3 bg-card border border-border rounded-2xl p-4 hover:bg-muted/50 transition-colors shadow-sm"
           >
-            <div className="h-9 w-9 rounded-xl bg-destructive/10 flex items-center justify-center flex-shrink-0">
-              <MessageCircle className="h-4 w-4 text-destructive" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-foreground">Reportar un error</p>
-              <p className="text-xs text-muted-foreground">soporte@flowi.gt — te respondemos pronto</p>
-            </div>
-            <ChevronDown className="h-4 w-4 text-muted-foreground -rotate-90 flex-shrink-0" />
-          </a>
-        </section>
-
-        {/* CONFIGURACIONES */}
-        <section>
-          <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wide uppercase px-1">CONFIGURACIONES</p>
-          <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm divide-y divide-border/50">
-            <div className="p-4 flex items-center justify-between bg-transparent">
-              <div>
-                <p className="text-sm font-medium text-foreground">Modo Oscuro</p>
-                <p className="text-xs text-muted-foreground">Cuida tus ojos de noche</p>
-              </div>
-              <Switch checked={isDark} onCheckedChange={(val) => toggleDarkMode(val)} />
-            </div>
-
-            <div className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-foreground">Cambiar contraseña</p>
-                <p className="text-xs text-muted-foreground">
-                  {resetSent ? "✅ Revisá tu correo" : "Te enviamos un link a " + user?.email}
-                </p>
-              </div>
-              <button onClick={handleResetPassword} disabled={resetLoading || resetSent}
-                className="text-xs font-bold text-primary disabled:opacity-50 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-1.5">
-                {resetLoading
-                  ? <span className="h-3 w-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                  : resetSent ? "Enviado ✓" : "Enviar link"}
-              </button>
-            </div>
-
-            <div className="p-4 flex items-center justify-between text-left w-full hover:bg-muted/50 cursor-pointer text-destructive" onClick={handleSignOut}>
-              <div>
-                <p className="text-sm font-bold">Cerrar Sesión Segura</p>
-                <p className="text-xs opacity-80">(Tus datos quedarán guardados en la nube)</p>
-              </div>
-              <LogOut className="h-5 w-5" />
-            </div>
+          <div className="h-9 w-9 rounded-xl bg-destructive/10 flex items-center justify-center flex-shrink-0">
+            <MessageCircle className="h-4 w-4 text-destructive" />
           </div>
-          <p className="text-center text-xs font-mono text-muted-foreground/60 mt-4">Flowi v1.1.0 Latino</p>
-        </section>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-foreground">Reportar un error</p>
+            <p className="text-xs text-muted-foreground">soporte@flowi.gt — te respondemos pronto</p>
+          </div>
+          <ChevronDown className="h-4 w-4 text-muted-foreground -rotate-90 flex-shrink-0" />
+        </a>
+      </section>
 
-      </div>
+      <section>
+        <p className="text-xs font-semibold text-muted-foreground mb-3 tracking-wide uppercase px-1">CONFIGURACIONES</p>
+        <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm divide-y divide-border/50">
+          <div className="p-4 flex items-center justify-between bg-transparent">
+            <div>
+              <p className="text-sm font-medium text-foreground">Modo Oscuro</p>
+              <p className="text-xs text-muted-foreground">Cuida tus ojos de noche</p>
+            </div>
+            <Switch checked={isDark} onCheckedChange={(val) => toggleDarkMode(val)} />
+          </div>
 
-      {(showAddFixed || !!editingExpense) && (
-        <AddFixedExpenseModal
-          initialData={editingExpense}
-          onClose={() => { setShowAddFixed(false); setEditingExpense(null); }}
-          onSave={(exp) => upsertFixedExpenseMutation.mutate(exp)}
-        />
-      )}
+          <div className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">Cambiar contraseña</p>
+              <p className="text-xs text-muted-foreground">
+                {resetSent ? "✅ Revisá tu correo" : "Te enviamos un link a " + user?.email}
+              </p>
+            </div>
+            <button onClick={handleResetPassword} disabled={resetLoading || resetSent}
+              className="text-xs font-bold text-primary disabled:opacity-50 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-1.5">
+              {resetLoading
+                ? <span className="h-3 w-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                : resetSent ? "Enviado ✓" : "Enviar link"}
+            </button>
+          </div>
 
-      {/* Re-using Income flow inside Profile */}
-      {editingField === "incomeModal" && (
-        <IncomeEditorModal profile={profile} onClose={() => setEditingField(null)} onUserUpdate={() => { refreshProfile(); setEditingField(null); }} />
-      )}
+          <div className="p-4 flex items-center justify-between text-left w-full hover:bg-muted/50 cursor-pointer text-destructive" onClick={handleSignOut}>
+            <div>
+              <p className="text-sm font-bold">Cerrar Sesión Segura</p>
+              <p className="text-xs opacity-80">(Tus datos quedarán guardados en la nube)</p>
+            </div>
+            <LogOut className="h-5 w-5" />
+          </div>
+        </div>
+        <p className="text-center text-xs font-mono text-muted-foreground/60 mt-4">Flowi v1.1.0 Latino</p>
+      </section>
 
     </div>
+
+      {
+    (showAddFixed || !!editingExpense) && (
+      <AddFixedExpenseModal
+        initialData={editingExpense}
+        onClose={() => { setShowAddFixed(false); setEditingExpense(null); }}
+        onSave={(exp) => upsertFixedExpenseMutation.mutate(exp)}
+      />
+    )
+  }
+
+  {
+    editingField === "incomeModal" && (
+      <IncomeEditorModal profile={profile} onClose={() => setEditingField(null)} onUserUpdate={() => { refreshProfile(); setEditingField(null); }} />
+    )
+  }
+
+    </div >
   );
 }
 
-// Subcomponente masivo aislado para evitar saturar Perfil
 function IncomeEditorModal({ profile, onClose, onUserUpdate }: { profile: any; onClose: () => void; onUserUpdate: () => void }) {
   const [freq, setFreq] = useState(profile?.income_frequency || 'monthly');
   const [p1, setP1] = useState(profile?.income_period_1?.toString() || "");
@@ -595,13 +622,12 @@ function IncomeEditorModal({ profile, onClose, onUserUpdate }: { profile: any; o
               </div>
             )}
           </div>
-
         </div>
 
         <Button className="w-full font-bold" onClick={() => updateMutation.mutate()}>Grabar Lógica</Button>
       </div>
     </div>
-  )
+  );
 }
 
 function AddFixedExpenseModal({ initialData, onClose, onSave }: any) {
@@ -612,13 +638,7 @@ function AddFixedExpenseModal({ initialData, onClose, onSave }: any) {
 
   const handleSave = () => {
     if (!amount || !category || !paymentDay) return;
-    onSave({
-      id: initialData?.id,
-      amount: parseFloat(amount),
-      category,
-      name,
-      payment_day: parseInt(paymentDay)
-    });
+    onSave({ id: initialData?.id, amount: parseFloat(amount), category, name, payment_day: parseInt(paymentDay) });
   };
 
   return (
