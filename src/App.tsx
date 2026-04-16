@@ -1,12 +1,14 @@
-import React, { lazy, Suspense } from "react";
+import React, { lazy, Suspense, useState, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/context/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import BottomNav from "@/components/BottomNav";
+import { usePlan } from "@/hooks/usePlan";
+import { PaywallModal } from "@/components/PaywallModal";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Gastos = lazy(() => import("./pages/Gastos"));
@@ -47,6 +49,33 @@ const FlowiSplash = () => (
 
 const queryClient = new QueryClient();
 
+function PremiumRoute({ children, feature }: { children: React.ReactNode, feature: string }) {
+  const { isPremium, loading } = usePlan()
+  const [showPaywall, setShowPaywall] = useState(false)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!loading && !isPremium) {
+      setShowPaywall(true)
+    }
+  }, [loading, isPremium])
+
+  if (loading) return null
+
+  if (!isPremium) return (
+    <>
+      {showPaywall && (
+        <PaywallModal
+          feature={feature}
+          onClose={() => navigate('/')}
+        />
+      )}
+    </>
+  )
+
+  return <>{children}</>
+}
+
 function AppLayout() {
   const location = useLocation();
   const isAuthOrOnboarding = ["/auth", "/onboarding"].includes(location.pathname);
@@ -65,10 +94,10 @@ function AppLayout() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/gastos" element={<Gastos />} />
               <Route path="/presupuesto" element={<Presupuesto />} />
-              <Route path="/suenos" element={<Suenos />} />
-              <Route path="/deudas" element={<Deudas />} />
-              <Route path="/analisis" element={<Analisis />} />
-              <Route path="/ahorro" element={<Ahorro />} />
+              <Route path="/suenos" element={<PremiumRoute feature="Sueños"><Suenos /></PremiumRoute>} />
+              <Route path="/deudas" element={<PremiumRoute feature="Deudas"><Deudas /></PremiumRoute>} />
+              <Route path="/analisis" element={<PremiumRoute feature="Análisis"><Analisis /></PremiumRoute>} />
+              <Route path="/ahorro" element={<PremiumRoute feature="Mi Ahorro"><Ahorro /></PremiumRoute>} />
               <Route path="/perfil" element={<Perfil />} />
             </Route>
 
