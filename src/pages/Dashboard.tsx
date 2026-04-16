@@ -5,6 +5,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { EXPENSE_CATEGORIES, CATEGORY_GROUPS, SAVING_TIPS, INSIGHTS, formatQ } from "@/lib/constants";
 import AddExpenseModal from "@/components/AddExpenseModal";
 import { useAuth } from "@/context/AuthContext";
+import { usePlan } from "@/hooks/usePlan";
+import { PaywallModal } from "@/components/PaywallModal";
 import { supabase } from "@/integrations/supabase/client";
 import { calculatePaymentDate, getPaymentDistanceText } from "@/lib/dateUtils";
 import { getFlowiInsights, type FlowiInsight } from "@/lib/aiAdvisor";
@@ -66,6 +68,8 @@ function CategoryMiniChart({ expenses }: { expenses: any[] }) {
 }
 
 export default function Dashboard() {
+  const { isPremium } = usePlan();
+  const [showPaywall, setShowPaywall] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [aiInsights, setAiInsights] = useState<FlowiInsight[]>([]);
   const [insightsLoading, setInsightsLoading] = useState(true);
@@ -365,35 +369,58 @@ export default function Dashboard() {
       </div>
 
       {/* Flowi dice — IA */}
-      {(insightsLoading || aiInsights.length > 0) && (
-        <div className="rounded-2xl bg-card border border-border p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Lightbulb className="h-4 w-4 text-accent" />
-            <span className="text-xs font-bold text-accent">Flowi dice</span>
-            <span className="text-xs text-muted-foreground opacity-60">· IA</span>
+      {isPremium ? (
+        (insightsLoading || aiInsights.length > 0) && (
+          <div className="rounded-2xl bg-card border border-border p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Lightbulb className="h-4 w-4 text-accent" />
+              <span className="text-xs font-bold text-accent">Flowi dice</span>
+              <span className="text-xs text-muted-foreground opacity-60">· IA</span>
+            </div>
+            {insightsLoading ? (
+              <div className="space-y-2">
+                <div className="h-14 rounded-xl bg-muted/50 animate-pulse" />
+                <div className="h-14 rounded-xl bg-muted/40 animate-pulse" />
+              </div>
+            ) : (
+              <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+                {aiInsights.map((ins, i) => (
+                  <div key={i} className={`flex-shrink-0 w-68 rounded-xl p-3 border ${
+                    ins.type === "urgent" ? "bg-destructive/10 border-destructive/20 text-destructive" :
+                    ins.type === "warning" ? "bg-warning/10 border-warning/20 text-warning" :
+                    ins.type === "success" ? "bg-green-500/10 border-green-500/20 text-green-600" :
+                    "bg-accent/10 border-accent/20 text-accent"
+                  }`}>
+                    <p className="text-xs font-bold mb-1">{ins.title}</p>
+                    <p className="text-xs leading-relaxed opacity-90">{ins.message}</p>
+                    {ins.action && <p className="text-xs font-semibold mt-1.5 opacity-75">👉 {ins.action}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          {insightsLoading ? (
-            <div className="space-y-2">
-              <div className="h-14 rounded-xl bg-muted/50 animate-pulse" />
-              <div className="h-14 rounded-xl bg-muted/40 animate-pulse" />
+        )
+      ) : (
+        <button
+          onClick={() => setShowPaywall(true)}
+          className="w-full flex items-center justify-between p-4 bg-violet-50 rounded-2xl border border-violet-100"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-xl">✨</span>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-violet-700">Consejo IA personalizado</p>
+              <p className="text-xs text-violet-400">Desbloqueá con Premium</p>
             </div>
-          ) : (
-            <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
-              {aiInsights.map((ins, i) => (
-                <div key={i} className={`flex-shrink-0 w-68 rounded-xl p-3 border ${
-                  ins.type === "urgent" ? "bg-destructive/10 border-destructive/20 text-destructive" :
-                  ins.type === "warning" ? "bg-warning/10 border-warning/20 text-warning" :
-                  ins.type === "success" ? "bg-green-500/10 border-green-500/20 text-green-600" :
-                  "bg-accent/10 border-accent/20 text-accent"
-                }`}>
-                  <p className="text-xs font-bold mb-1">{ins.title}</p>
-                  <p className="text-xs leading-relaxed opacity-90">{ins.message}</p>
-                  {ins.action && <p className="text-xs font-semibold mt-1.5 opacity-75">👉 {ins.action}</p>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+          </div>
+          <span className="text-violet-400 text-xs font-medium">Premium →</span>
+        </button>
+      )}
+
+      {showPaywall && (
+        <PaywallModal
+          feature="IA Advisor"
+          onClose={() => setShowPaywall(false)}
+        />
       )}
 
       {/* Tip rotativo — Reflexión / Técnica de ahorro */}
